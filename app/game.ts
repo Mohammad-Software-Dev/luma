@@ -39,21 +39,21 @@ export class Game {
  private keydown=(e:KeyboardEvent)=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space','KeyA','KeyD','KeyW','KeyJ','KeyX','KeyK','KeyE','ShiftLeft','ShiftRight'].includes(e.code)){if(this.started&&!this.paused){e.preventDefault();this.input(e.code,true)}}};
  private keyup=(e:KeyboardEvent)=>{this.input(e.code,false)};
  private blur=()=>{this.keys.clear();this.pressed.clear();this.accumulator=0};
- private visibility=()=>{if(document.hidden){this.blur();this.save();this.audio?.suspend()}else if(!this.paused&&!this.mute)this.audio?.resume()};
+ private visibility=()=>{if(document.hidden){this.blur();this.save();this.audio?.suspend().catch(()=>{})}else if(!this.paused&&!this.mute)this.audio?.resume().catch(()=>{})};
  input(key:string,down:boolean){if(down&&!this.paused){if(!this.keys.has(key))this.pressed.add(key);this.keys.add(key)}else this.keys.delete(key)}
- setPaused(value:boolean){this.paused=value;this.blur();if(value)this.audio?.suspend();else if(!this.mute)this.audio?.resume()}
- setMuted(value:boolean){this.mute=value;if(value)this.audio?.suspend();else if(!this.paused)this.audio?.resume()}
+ setPaused(value:boolean){this.paused=value;this.blur();if(value)this.audio?.suspend().catch(()=>{});else if(!this.mute)this.audio?.resume().catch(()=>{})}
+ setMuted(value:boolean){this.mute=value;if(value)this.audio?.suspend().catch(()=>{});else if(!this.paused)this.audio?.resume().catch(()=>{})}
  hasSave(){try{return !!this.readSave()}catch{return false}}
  private readSave(){try{const raw=localStorage.getItem(SAVE_KEY);if(!raw)return null;const s=JSON.parse(raw);if(s.version!==1||!Number.isInteger(s.room)||s.room<0||s.room>5||!Array.isArray(s.seeds)||!s.seeds.every((x:unknown)=>typeof x==='number'&&[2,4,5].includes(x))||!Array.isArray(s.collected)||!Array.isArray(s.visited))return null;return s}catch{return null}}
  start(resume=false){
   this.world=rooms();this.collected.clear();this.broken.clear();this.particles=[];this.state={room:0,roomName:'The Waking Glade',health:5,light:0,seeds:[],dash:false,doubleJump:false,visited:[0],time:0,won:false,message:''};this.checkpoint={room:0,x:230,y:705};
   const s=resume?this.readSave():null;if(s){this.state={...this.state,room:s.room,seeds:[...new Set<number>(s.seeds)],dash:!!s.dash,doubleJump:!!s.doubleJump,light:Number.isFinite(s.light)?Math.max(0,s.light):0,visited:s.visited.filter((n:number)=>Number.isInteger(n)&&n>=0&&n<6),time:Number.isFinite(s.time)?s.time:0};this.collected=new Set(s.collected.filter((n:unknown)=>typeof n==='string'));this.broken=new Set(s.broken||[]);if(s.checkpoint&&Number.isInteger(s.checkpoint.room)&&s.checkpoint.room>=0&&s.checkpoint.room<6&&Number.isFinite(s.checkpoint.x))this.checkpoint=s.checkpoint;}
   this.player={x:s?this.checkpoint.x:230,y:705,vx:0,vy:0,face:1,grounded:true};this.state.room=s?this.checkpoint.room:0;this.state.roomName=this.world[this.state.room].name;this.safe={x:this.player.x,y:705};this.camera=Math.max(0,this.player.x-this.viewport*.35);this.invincible=0;this.attack=0;this.attackCooldown=0;this.dashTime=0;this.dashCooldown=0;this.transition=0;this.coyote=.1;this.jumpBuffer=0;this.usedDouble=false;this.started=true;this.paused=false;
-  try{if(!this.audio)this.audio=new AudioContext();if(!this.mute)this.audio.resume()}catch{}
+  try{if(!this.audio||this.audio.state==='closed')this.audio=new AudioContext();if(!this.mute)this.audio.resume().catch(()=>{})}catch{}
   this.toast(s?'Welcome back, little light.':'Follow the fireflies. Your adventure begins to the east.');this.save();this.publish();
  }
  save(){if(!this.started)return;try{localStorage.setItem(SAVE_KEY,JSON.stringify({version:1,room:this.state.room,checkpoint:this.checkpoint,seeds:this.state.seeds,dash:this.state.dash,doubleJump:this.state.doubleJump,light:this.state.light,visited:this.state.visited,time:this.state.time,collected:[...this.collected],broken:[...this.broken]}))}catch{this.saveAvailable=false}}
- destroy(){this.stopped=true;cancelAnimationFrame(this.raf);this.resize.disconnect();this.lifecycle.abort();window.removeEventListener('keydown',this.keydown);window.removeEventListener('keyup',this.keyup);window.removeEventListener('blur',this.blur);document.removeEventListener('visibilitychange',this.visibility);this.save();this.audio?.close()}
+ destroy(){this.stopped=true;cancelAnimationFrame(this.raf);this.resize.disconnect();this.lifecycle.abort();window.removeEventListener('keydown',this.keydown);window.removeEventListener('keyup',this.keyup);window.removeEventListener('blur',this.blur);document.removeEventListener('visibilitychange',this.visibility);this.save();this.audio?.close().catch(()=>{})}
  private frame=(now:number)=>{if(this.stopped)return;const dt=Math.min((now-(this.last||now))/1000,.05);this.last=now;this.elapsed+=dt;if(!this.paused&&!document.hidden&&!this.state.won){this.accumulator+=dt;while(this.accumulator>=1/120){this.update(1/120);this.accumulator-=1/120}}this.render();this.raf=requestAnimationFrame(this.frame)};
  private held(...keys:string[]){return keys.some(k=>this.keys.has(k))}
  private tap(...keys:string[]){return keys.some(k=>this.pressed.has(k))}

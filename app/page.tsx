@@ -8,7 +8,7 @@ const roomNames=['Waking Glade','Whisper Falls','Amber Hollow','Windborne Canopy
 export default function Home(){
  const canvas=useRef<HTMLCanvasElement>(null), game=useRef<Game|null>(null);
  const [state,setState]=useState(initial),[ready,setReady]=useState(false),[playing,setPlaying]=useState(false),[panel,setPanel]=useState<'map'|'guide'|'pause'|null>(null),[muted,setMuted]=useState(false),[saved,setSaved]=useState(false),[error,setError]=useState('');
- useEffect(()=>{let dead=false; import('./game').then(({Game})=>{if(dead||!canvas.current)return;const g=new Game(canvas.current,s=>setState({...s}));game.current=g;g.ready.then(()=>{if(!dead)setReady(true)}).catch(()=>setError('The forest could not load. Refresh to try again.'));setSaved(g.hasSave());});return()=>{dead=true;game.current?.destroy()};},[]);
+ useEffect(()=>{let dead=false; import('./game').then(({Game})=>{if(dead||!canvas.current)return;const g=new Game(canvas.current,s=>setState({...s}));game.current=g;g.ready.then(()=>{if(!dead)setReady(true)}).catch(()=>setError('The forest could not load. Refresh to try again.'));setSaved(g.hasSave());});return()=>{dead=true;game.current?.destroy();game.current=null};},[]);
  useEffect(()=>{game.current?.setPaused(!playing||panel!==null)},[playing,panel]);
  useEffect(()=>{const key=(e:KeyboardEvent)=>{if(e.code==='Escape'&&playing)setPanel(p=>p?null:'pause');if(e.code==='KeyM'&&playing){e.preventDefault();setPanel(p=>p==='map'?null:'map')}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[playing]);
  const start=(resume=false)=>{game.current?.start(resume);setPlaying(true);setPanel(null);};
