@@ -1,36 +1,29 @@
 "use client";
 import { useState } from 'react';
-import { Check, Compass, Flame, Leaf, LockKeyhole, Navigation, Sun, Flower2 } from 'lucide-react';
-import { journeyObjective, worldRegions, memoryBlooms } from './game';
+import { Check, Compass, Flame, LockKeyhole, Sun, Flower2, Swords } from 'lucide-react';
+import { journeyObjective, worldRegions, memoryBlooms, stages, stageRooms, areaStage, areaPart, stageBeacons, unlockedStage } from './game';
 import type { Snapshot } from './game';
-
-const positions=[[100,255],[300,255],[500,255],[300,75],[100,75],[500,75]];
-const passages=worldRegions.flatMap(region=>region.doors.filter(d=>region.id<d.to).map(d=>({from:region.id,to:d.to,needs:d.needs??worldRegions[d.to].doors.find(back=>back.to===region.id)?.needs})));
 
 export function WorldMap({state,onTravel,interactKey="E"}:{state:Snapshot;onTravel:(room:number)=>void;interactKey?:string}){
  const [selected,setSelected]=useState(state.room);
- const objective=journeyObjective(state),region=worldRegions[selected];
- const known=(id:number)=>state.visited.includes(id)||worldRegions.some(r=>state.visited.includes(r.id)&&r.doors.some(d=>d.to===id));
+ const objective=journeyObjective(state),region=worldRegions[selected],stage=areaStage(selected),available=unlockedStage(state,stage);
+ const known=(id:number)=>unlockedStage(state,areaStage(id))&&(state.visited.includes(id)||worldRegions.some(r=>state.visited.includes(r.id)&&r.doors.some(d=>d.to===id)));
  const revealed=known(selected),lit=state.shrines.includes(selected),bloom=memoryBlooms.find(b=>b.room===selected),remembered=bloom&&state.discoveries.includes(bloom.id);
  return <div className="exploration-map">
-  <div className="map-objective"><Sun size={22}/><div><span>NEXT DISCOVERY</span><strong>{objective.title}</strong><p>{objective.detail}</p></div></div>
-  <div className="world-map connected-map" aria-label="Six areas and their connecting passages">
-   <svg viewBox="0 0 600 330" preserveAspectRatio="none" aria-hidden="true" className="map-passages">
-    {passages.map(({from,to,needs})=>{const a=positions[from],b=positions[to],locked=needs&&!state[needs],visible=known(from)&&known(to),route=objective.route.some((id,i)=>id===from&&objective.route[i+1]===to||id===to&&objective.route[i+1]===from);return <g key={`${from}-${to}`} opacity={visible?1:.25}><line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} className={locked?'passage-locked':route?'passage-route':'passage-open'}/>{locked&&<g transform={`translate(${(a[0]+b[0])/2},${(a[1]+b[1])/2})`}><circle r="13" fill="#18362c"/><path d="M-4 -1 V-5 A4 4 0 0 1 4 -5 V-1 M-6 -1 H6 V7 H-6 Z" fill="none" stroke="#d6a897" strokeWidth="2"/></g>}</g>})}
-   </svg>
-   {[4,3,5,0,1,2].map(id=>{const r=worldRegions[id],visited=state.visited.includes(id),current=id===state.room;return <button key={id} aria-pressed={selected===id} aria-label={`${known(id)?r.name:'Unexplored area'}${current?', you are here':''}${state.shrines.includes(id)?', Sunwell lit':''}`} style={{left:`${positions[id][0]/6}%`,top:`${positions[id][1]/3.3}%`}} onClick={()=>setSelected(id)} className={`map-room ${visited?'discovered':''} ${current?'current':''} ${selected===id?'selected':''} ${id===objective.target&&!state.won?'objective-region':''}`}>
-    <span>{current?<Leaf size={18}/>:state.seeds.includes(id)?<Check size={18}/>:id===objective.target&&!state.won?<Sun size={18}/>:<Compass size={18}/>}</span><strong>{known(id)?r.name:'Unexplored'}</strong><small>{current?'YOU ARE HERE':state.seeds.includes(id)?'SUNSEED RECOVERED':visited?'EXPLORED':'UNDISCOVERED'}</small>{state.shrines.includes(id)&&<Flame className="map-shrine" size={13} aria-hidden="true"/>}
-   </button>})}
-  </div>
-  <div className="map-legend"><span><Flower2 size={13}/>{state.discoveries.length} / {memoryBlooms.length} memories</span><span><Navigation size={13}/> Suggested route</span><span><LockKeyhole size={13}/> Sky Feather gate</span><span><Flame size={13}/> Lit Sunwell</span></div>
+  <div className="map-objective"><Sun size={22}/><div><span>NEXT CHALLENGE</span><strong>{objective.title}</strong><p>{objective.detail}</p></div></div>
+  <nav className="campaign-stages" aria-label="Campaign stages">{stages.map((s,i)=><button key={s.name} aria-pressed={stage===i} onClick={()=>setSelected(i)}><span>{state.bosses.includes(i)?<Check size={16}/>:unlockedStage(state,i)?<Compass size={16}/>:<LockKeyhole size={16}/>} STAGE {i+1}</span><strong>{s.name}</strong><small>{state.bosses.includes(i)?'GUARDIAN AWAKENED':unlockedStage(state,i)?`${stageBeacons(state,i)} / 3 BEACONS`:`DEFEAT ${stages[i-1].boss.toUpperCase()}`}</small></button>)}</nav>
+  <div className="campaign-route" aria-label={`Four areas in ${stages[stage].name}`}>{stageRooms(stage).map((id,index)=>{
+   const r=worldRegions[id],visited=state.visited.includes(id),current=id===state.room,complete=index===3?state.bosses.includes(stage):state.beacons.includes(`${stage}:${index}`);
+   return <button key={id} aria-pressed={selected===id} className={current?'current':''} onClick={()=>setSelected(id)}><span>{complete?<Check size={20}/>:index===3?<Swords size={20}/>:<Sun size={20}/>}</span><small>{['EXPLORE','TRAVERSAL TRIAL','COMBAT GAUNTLET','BOSS BATTLE'][index]}</small><strong>{available?r.name:'Sealed area'}</strong><em>{current?'YOU ARE HERE':complete?index===3?'AWAKENED':'BEACON LIT':visited?'EXPLORED':available?'AWAITING YOUR LIGHT':'LOCKED'}</em></button>;
+  })}</div>
+  <div className="map-legend"><span><Swords size={13}/>{state.bosses.length} / 6 guardians</span><span><Flower2 size={13}/>{state.discoveries.length} / {memoryBlooms.length} memories</span><span><Flame size={13}/> Lit Sunwell</span></div>
   <section className="map-detail" aria-label="Selected area details">
-   <div className="map-detail-heading"><h3>{revealed?region.name:'An undiscovered clearing'}</h3>{revealed&&region.hasSeed&&<span><Sun size={14}/>{state.seeds.includes(selected)?'Seed recovered':'Sunseed awaits'}</span>}</div>
-   {revealed?<><ul className="map-connections">{region.doors.map(door=><li key={door.to}><Chevron/><span>{worldRegions[door.to].name}</span><small>{door.needs&&!state[door.needs]?'Sky Feather required':door.needs?'Sky Feather path':'Open passage'}</small></li>)}</ul>
-    {lit?<button className="travel-button" disabled={!state.canTravel||selected===state.room||state.won} onClick={()=>onTravel(selected)}><Flame size={16}/>{selected===state.room?'Your current Sunwell':`Travel to ${region.name}`}</button>:<p className="map-note">Rest at this area’s Sunwell to unlock a return journey.</p>}
-   </>:<p className="map-note">Explore a connecting passage to reveal this clearing.</p>}
+   <div className="map-detail-heading"><h3>{available?region.name:'A sealed stage'}</h3>{region.part===3&&available&&<span><Swords size={14}/>{stages[stage].boss}{state.bosses.includes(stage)?' · awakened':''}</span>}</div>
+   {available?<><p className="map-note">{region.part===3?stages[stage].hint:region.part===2?'Awaken all five creatures and activate the high beacon. All three stage beacons are required to open the boss arena.':region.part===1?'Cross the environmental trial and interact with its golden beacon. Rest at the entrance Sunwell before attempting the obstacles.':'Explore the high paths and light the golden beacon. Find movement upgrades and optional memories along the way.'}</p><ul className="map-connections">{region.doors.map(door=><li key={door.to}><span aria-hidden="true">→</span><span>{worldRegions[door.to].name}</span><small>{!unlockedStage(state,areaStage(door.to))?'Guardian victory required':door.trial!==undefined&&stageBeacons(state,stage)<3?'Three beacons required':door.trial!==undefined?'Gauntlet must be cleared':'Open passage'}</small></li>)}</ul>
+    {lit?<button className="travel-button" disabled={!state.canTravel||selected===state.room||state.won||!revealed} onClick={()=>onTravel(selected)}><Flame size={16}/>{selected===state.room?'Your current Sunwell':`Travel to ${region.name}`}</button>:<p className="map-note">Rest at this area’s Sunwell to unlock a return journey.</p>}
+   </>:<p className="map-note">Awaken {stages[Math.max(0,stage-1)].boss} to open this stage. Travel cannot bypass a guardian.</p>}
    {revealed&&bloom&&<div className="map-memory"><Flower2 size={19}/><div><strong>{remembered?bloom.name:'A quiet memory waits'}</strong><p>{remembered?bloom.memory:bloom.hint}</p><small>{remembered?'REMEMBERED · 20 LIGHT RECEIVED':state[bloom.needs]?`${interactKey} / Y · INTERACT TO REMEMBER`:`RETURN WITH ${bloom.needs==='dash'?'SUN DASH':'SKY FEATHER'}`}</small></div></div>}
-   <p className="travel-hint">{state.won?'The forest is restored. A new journey awaits.':state.canTravel?'You are at a lit Sunwell. Select another lit Sunwell to travel.':`Travel begins at a lit Sunwell. Rest with ${interactKey} or Y, then open the map beside it.`}</p>
+   <p className="travel-hint">{state.won?'The forest is restored. A new journey awaits.':state.canTravel?'Select a lit Sunwell in an unlocked stage to travel.':`Travel begins at a lit Sunwell. Rest with ${interactKey} or Y, then open the map beside it.`}</p>
   </section>
  </div>;
 }
-function Chevron(){return <span className="map-chevron" aria-hidden="true">↗</span>}

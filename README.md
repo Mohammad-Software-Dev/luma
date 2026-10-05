@@ -1,6 +1,6 @@
 # Luma: The Sunseed
 
-A complete small browser Metroidvania built with TypeScript, React, Canvas 2D, and Web Audio. Six interconnected forest areas with individual cinematic backdrops, two movement upgrades, varied enemies, three sunseeds, and a homecoming finale.
+A browser Metroidvania built with TypeScript, React, Canvas 2D, and Web Audio. Its campaign spans **six stages and 24 areas**, with cinematic forest backdrops, movement upgrades, traversal trials, combat gauntlets, optional discoveries, and six mandatory guardian battles.
 
 ## Run
 
@@ -13,11 +13,28 @@ npm ci
 npm run dev
 ```
 
-Open **http://localhost:5173** (or the address printed by the server). Keep the terminal running; Ctrl+C stops the game server. To update an existing checkout, run `git pull` on `main` before starting it. Sound begins when you start your journey.
-
-Default controls: A/D or arrows to move, Space to jump, J to strike, Shift to dash after discovery, E to interact, M for the map, and Escape to pause. Keyboard controls can be changed in Game settings.
+Open **http://localhost:5173** (or the address printed by the server). Keep the terminal running; Ctrl+C stops the server. To update an existing checkout, run `git pull` on `main` before starting it. Sound begins when you start your journey.
 
 For a production build, run `npm run build`.
+
+## Campaign
+
+Each stage has four areas: exploration, a traversal trial, a combat gauntlet, and a boss arena. Find and interact with one trail beacon in each of the first three areas. **All three beacons and every creature in the gauntlet must be cleared before the arena opens. Defeating the stage boss is the only way to unlock the next stage.** Sunwell travel respects these gates.
+
+| Stage | Traversal trial | Combat gauntlet | Final guardian |
+| --- | --- | --- | --- |
+| Waking Glade | Bramble Brook | Rootbound Crossing | Briarhorn: charges and ground waves |
+| Whisper Falls | The Spillway | Torrent Stair | Tidewing: projectile fans and marked rain |
+| Amber Hollow | Ember Veins | Crystal Ascent | Amberback: eruptions and charges |
+| Windborne Canopy | Swaying Boughs | Stormleaf Watch | Gale Sovereign: spirals and fans |
+| Moonpetal Sanctuary | Lunar Causeway | Starlit Terraces | Moonbloom: rain, spirals, and eruptions |
+| Sunspire Ruins | The Broken Aqueduct | Dawnward Keep | Solwarden: three phases combining earlier attacks |
+
+Trials introduce thorns, timed vents, swinging pods, moving platforms, lifts, and gaps. Find Sun Dash in Whisper Falls and the Sky Feather in Amber Hollow; later routes use these abilities. The map shows the next objective, each stage’s progress, passages, and requirements.
+
+Guardians announce attacks before releasing them. Dodge, jump, dash, or strike projectiles to create a path, then counter when the guardian opens during recovery. Their second phases intensify their attacks; Solwarden has a third phase. Crossing into a battle seals the arena until victory or defeat. A failed attempt resets that guardian’s health while retaining beacons and cleared gauntlet creatures.
+
+Guardian victories grant 40 light, restore health, activate the arena checkpoint, and open the next stage. The guardians of Amber Hollow, Moonpetal Sanctuary, and Sunspire Ruins restore the three sunseeds. Awakening all six guardians restores dawn.
 
 ## Controls
 
@@ -25,82 +42,49 @@ For a production build, run `npm run build`.
 | --- | --- |
 | A / D or left / right arrows | Move |
 | Space / W / up arrow | Jump; hold for height |
-| J / X | Light strike |
+| J / X | Light strike; chain three strikes for a stronger finisher |
 | Shift / K | Sun Dash after discovery |
 | Jump again in the air | Double jump after discovery |
-| E / down arrow | Use shrines and passages |
+| E / down arrow | Use beacons, Sunwells, memories, and passages |
 | M | World map |
 | Escape | Pause |
 
-Standard-mapped controllers are supported: left stick/D-pad to move, A to jump, X to strike, B/RB to dash, Y to interact, View to open the map, and Menu to pause. Use up/down and A to navigate menus; left/right adjusts volume and motion settings; B closes a menu. Press a controller button to let the browser detect it. Nonstandard mappings fall back to keyboard/touch. Controller rumble is optional where the browser and hardware support it.
+Standard-mapped controllers are supported: left stick/D-pad to move, A to jump, X to strike, B/RB to dash, Y to interact, View to open the map, and Menu to pause. Use up/down and A to navigate menus; left/right adjusts settings; B closes a menu. Press a controller button to let the browser detect it. Nonstandard mappings fall back to keyboard/touch. Optional rumble depends on browser and hardware support.
 
-Touch controls appear on touch devices. Sound begins after starting the game. The toolbar offers saved mute, help, and game settings; fullscreen is in the footer. Progress is saved in this browser on this device; it does not sync across devices. Older version-1 saves remain compatible, and defeated enemies now stay defeated after reloading. The game pauses when the browser loses focus or the active controller disconnects.
+Touch controls appear on touch devices. The toolbar offers help, saved mute, and game settings; fullscreen is in the footer. The game pauses when the browser loses focus or the active controller disconnects.
 
-## Adventure
+## Exploration, checkpoints, and upgrades
 
-Follow the eastward passages to Whisper Falls to find Sun Dash. Break the amber barrier in Amber Hollow and collect the Sky Feather. Explore the upper paths, free the three sunseeds from the wisps, and bring them to the Waking Glade's Sunwell.
+- Rest at a Sunwell to heal, save a checkpoint, and activate travel. Open the map beside a lit Sunwell and select another lit Sunwell in an unlocked stage to travel there. Entering an area alone does not activate its checkpoint.
+- Three optional Memory Blooms wait above the brook, falls, and canopy. Return with movement upgrades and interact beside a bud to awaken it. Each grants 20 light and a story recorded on the map, which provides clues before discovery.
+- Resting also opens the blessings menu. Heartwood costs 20 light for a sixth heart and 35 for a seventh. Glowkeeper costs 25 light and extends mote collection. Purchases require enough light and cannot be repeated after completion.
+- Beacons grant 10 light once. Abilities, discoveries, blessings, cleared creatures, beacons, and guardian victories persist through death and reload. Unfinished guardian fights restart at full health.
 
-## Quality update
+## Comfort and settings
 
-- An eight-frame run cycle plus jump, fall, landing, strike, hurt, and dash poses.
-- Five new optimized WebP environments for the falls, grotto, canopy, sanctuary, and ruins.
-- Three-hit combat combinations with a stronger finisher, brief impact pauses, dust, and footsteps.
-- Drifters, telegraphed chargers, projectile sentries, and an eight-heart Keeper with a second attack phase.
-- Strike projectiles to disperse them, or dash through them. Watch wind-up lines, then dodge before attacks release.
-- Controller gameplay/menu input, optional vibration, dash cooldown feedback, and a boss health bar.
-- Reduced-motion preferences disable camera shake and vibration and reduce interface animation.
+Music and game sounds have separate volume controls, with saved mute and optional controller vibration. Reduced motion follows the device preference or can be set explicitly; it removes camera shake and vibration and reduces interface animation.
 
-## Exploration update
+Gentle Journey lengthens attack warnings and recovery windows, slows charge/projectile attacks, extends damage immunity to 2.4 seconds, and makes falls free of heart loss. It keeps every campaign objective and gate.
 
-- The connected map shows actual passages, Sky Feather gates, the next objective, and suggested routes.
-- Select an area to see its outgoing passages and sunseed status. Adjacent destinations are revealed as you explore.
-- Rest with E / Y at a Sunwell to activate it. Open the map while standing beside a lit Sunwell, then select another lit Sunwell to travel there.
-- Entering an area no longer silently activates its checkpoint. Death and reload return to the last Sunwell where you rested; collected abilities, seeds, and defeated enemies remain saved.
-- Existing version-1 saves retain their previous checkpoint and gain the starting Sunwell. Previously visited areas still require a rest to unlock travel.
-- Restoring the forest stays complete after reloading. Lethal damage clears the old room’s projectiles and prevents pickups from that room during respawn.
+Movement, jump, strike, dash, interaction, and map keys can be rebound. Hints update to match. Escape always pauses; conflicting keys are rejected. Default secondary aliases remain available until that action is remapped.
 
-## Combat update
+## Save compatibility
 
-- Distinct animated woodland creatures: leaf-winged moths, charging beetles, lantern flowers, and an owl-like Keeper.
-- Charging lanes, committed projectile fan warnings, and filling wind-up rings make each attack readable. Warning lines have dark outlines for bright backgrounds.
-- Strikes briefly stun regular enemies and make contact safe during recovery; danger returns when the creature recovers.
-- A 140 ms input buffer helps chain three strikes. Damage, finishers, parries, guarding, and awakenings have visible feedback. Pausing clears queued attacks.
-- The Keeper guards while preparing and opens after firing. Two well-timed three-hit counter windows can awaken it; its second phase has a wider fan and an explicit HUD cue.
-- Projectiles stop at terrain. Creature awakenings fade out instead of disappearing immediately; invulnerability uses a gentle opacity pulse instead of rapid blinking.
+Adventure progress is saved in this browser on this device and does not sync across devices. Preferences save separately and survive starting a new journey. If storage is unavailable, the game remains playable for the session.
 
-## Comfort and controls update
+The expanded campaign writes version-2 progress under the existing save key. **Continuing a version-1 save retains earned abilities, light, hearts, blessings, memories, sunseeds, and regular creature rewards, but begins the new campaign at Waking Glade.** Its six guardians and trail beacons start unfinished, including for previously completed saves. This prevents old progress from skipping the new stage battles. The game explains the migration on continuation. Version-2 saves resume at the last checkpoint in an unlocked stage.
 
-- Settings are available from the title toolbar and pause menu. Music and game sounds have separate volume controls, alongside saved mute and optional controller vibration.
-- Reduced motion can follow the device preference or be enabled explicitly. It removes camera shake and vibration and reduces interface and decorative animation.
-- Gentle Journey lengthens attack warnings and recovery windows, slows charge/projectile attacks, extends damage immunity to 2.4 seconds, and makes falls free of heart loss. It preserves movement upgrades and all objectives.
-- Rebind movement, jump, strike, dash, interaction, and map keys. Hints and guidance update to match. Escape always pauses; conflicting keys are rejected. Default secondary aliases remain available until that action is remapped.
-- Preferences save separately from adventure progress. Starting a new journey keeps them; malformed settings safely fall back to defaults. When storage is unavailable, preferences still work for the session.
+Starting a new journey resets adventure progress and retains device preferences.
 
-## Memories and blessings update
+## Implementation and verification
 
-- Three optional Memory Blooms wait above the brook, falls, and canopy. Return with Sun Dash or the Sky Feather, then interact beside a bud to awaken it. Each grants 20 light and a short forest story, recorded on the map.
-- The map offers a clue before discovery and reveals the story afterward. These discoveries are optional; the three-sunseed finale remains unchanged.
-- Rest at a Sunwell to open its blessings menu. Heartwood costs 20 light for a sixth heart and 35 for a seventh. Glowkeeper costs 25 light and extends mote collection from 44 to 105 world pixels. It does not extend seed or memory collection.
-- Purchases require sufficient gathered light and a paused game beside a lit Sunwell. Completed upgrades cannot be purchased again. The pause menu and nearby Sunwell button can reopen blessings; the menu also leads to map travel.
-- Extra hearts apply to rest, death recovery, fast travel, and reloads. Blessings, spent light, and memories are saved together with the journey; version-1 saves without these fields still load. Starting a new journey resets them and preserves device preferences.
-
-## Next development priorities
-
-1. **World expansion:** additional ability-gated rooms, distinct environmental challenges, and another movement reward.
-2. **Release playtesting:** physical controller and touch-device checks, browser audio checks, and a full playthrough before updating the hosted game.
-
-The previous development branch has been merged. Work continues directly on `main` as requested.
-
-## Implementation
-
-- `app/game.ts`: fixed-step 120 Hz physics, rooms, rendering, audio, persistence, and progression.
-- `app/page.tsx`: React game interface, guidance, pause menu, and touch input.
-- `app/preferences.ts` and `app/game-settings.tsx`: validated device preferences, remapping, and accessible settings.
-- `app/world-map.tsx`: connected map, memory clues and stories, area details, and Sunwell travel.
-- `app/sunwell.tsx`: blessing purchases and discovery guidance.
-- `app/globals.css`: responsive interface styling.
-- `public/forest.png`, `public/*.webp`, `public/guardian.png`, and `public/guardian-run.png`: original AI-generated environment and character artwork.
-- `tests/gameplay.mjs`: 72 deterministic checks using mocked browser APIs, including combat, progression, save compatibility, controller mapping, enemy attack timing, travel restrictions, checkpoint migration, respawn isolation, buffered combos, interruption and recovery, a full Keeper counter fight, projectile terrain collision, actual jumps to all three sunseeds (with enemies disabled to isolate geometry), preference validation and persistence, real keyboard remapping, assist difficulty, rumble suppression, separate audio buses, blessing costs and purchase restrictions, save migration, memory ability gates and one-time rewards, and real jumps to all three Memory Blooms. Hardware controller behavior still benefits from real-device playtesting.
+- `app/campaign.ts`: stage content, authored trials, shared gate rules, and boss attack profiles used by both behavior and warnings.
+- `app/game.ts`: fixed-step 120 Hz physics, enemies, hazards, moving platforms, rendering, audio, persistence, and progression.
+- `app/page.tsx`: React interface, guidance, pause menu, and touch input.
+- `app/world-map.tsx`: six-stage campaign map, four-area stage routes, memory clues, and Sunwell travel.
+- `app/preferences.ts`, `app/game-settings.tsx`, and `app/sunwell.tsx`: validated preferences, remapping, settings, and blessing purchases.
+- `public/forest.png`, `public/*.webp`, and guardian images: original generated environment and character artwork, extended with procedural animation and effects.
+- `tests/gameplay.mjs`: 87 deterministic checks with mocked browser APIs. Coverage includes campaign and travel gates, save migration and malformed data, checkpoints, boss attack cycles and rewards, all six guardian counter fights, a first-boss fight with ordinary jumps and five hearts, hazards, moving-platform carry, combat buffering, controller mapping, preferences, audio buses, blessings, and memories. Real movement checks reach every trial beacon and exit and every gauntlet beacon; enemies and hazards are disabled in those geometry checks to isolate reachability.
 
 ```sh
 npm test
@@ -108,6 +92,14 @@ npm run typecheck
 npm run build
 ```
 
-GitHub Actions runs the gameplay checks, TypeScript check, and production build on pushes and pull requests.
+GitHub Actions runs gameplay checks, TypeScript checks, and production builds on pushes and pull requests. Work continues directly on `main` as requested.
 
-The artwork uses a realistic forest backdrop with a stylized guardian and simple animated enemies. This is a compact 2D adventure rather than a large 3D game. The progress WebMCP tool is optional and feature-detected; unsupported browsers run the game normally.
+Browser review covers desktop and narrow-screen layouts, the campaign map, guardian interface, and hazard visuals. Hardware controller, physical touch-device, and audio checks still need real-device playtesting. The expanded content supports a longer adventure, but its completion time has not been measured in a full human playthrough.
+
+## Next development priorities
+
+1. Play the complete six-stage campaign to tune difficulty, encounter pacing, checkpoints, and duration from actual player feedback.
+2. Expand the variation between combat gauntlets and add optional side routes and rewards.
+3. Complete physical controller, touch, and audio checks before updating the hosted release.
+
+The artwork combines realistic environment backdrops with stylized animated characters in a 2D game. The optional progress WebMCP tool is feature-detected; unsupported browsers run the game normally.

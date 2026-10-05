@@ -1,11 +1,13 @@
+import { stages, trials, stageRooms, areaStage, areaPart, beaconId, stageBeacons, unlockedStage, bossPhase, bossAttack, type Hazard, type MovingPlatform, type BossPattern } from './campaign';
+export { stages, stageRooms, areaStage, areaPart, stageBeacons, unlockedStage } from './campaign';
 import { canonicalKeys, keyboardAction, keyLabel, normalizePreferences, readPreferences, type ControlAction, type Preferences } from './preferences';
 /** Luma's deterministic, fixed-step TypeScript game engine. No remote services. */
-export interface Snapshot {room:number;roomName:string;health:number;maxHealth:number;heartLevel:number;magnet:boolean;discoveries:string[];light:number;seeds:number[];dash:boolean;doubleJump:boolean;visited:number[];shrines:number[];canTravel:boolean;time:number;won:boolean;message:string;controller:boolean;dashCharge:number;bossHealth:number|null;bossMaxHealth:number;bossIntent:string;combo:number;animation:string}
-type Platform={x:number;y:number;w:number;h:number};
-type Door={x:number;y:number;to:number;label:string;needs?:'doubleJump'|'dash'};
+export interface Snapshot {room:number;roomName:string;bosses:number[];beacons:string[];bossName:string;stage:number;part:number;enemiesLeft:number;health:number;maxHealth:number;heartLevel:number;magnet:boolean;discoveries:string[];light:number;seeds:number[];dash:boolean;doubleJump:boolean;visited:number[];shrines:number[];canTravel:boolean;time:number;won:boolean;message:string;controller:boolean;dashCharge:number;bossHealth:number|null;bossMaxHealth:number;bossIntent:string;combo:number;animation:string}
+type Platform={x:number;y:number;w:number;h:number;moving?:MovingPlatform};
+type Door={x:number;y:number;to:number;label:string;needs?:'doubleJump'|'dash';boss?:number;trial?:number};
 type Mote={x:number;y:number;id:string};
 type EnemyKind='drifter'|'charger'|'sentry'|'keeper';
-type Enemy={x:number;y:number;home:number;range:number;phase:number;hp:number;hit:number;kind:EnemyKind;mode:'patrol'|'windup'|'attack'|'recover';timer:number;aimX:number;aimY:number;direction:number;maxHp:number;id:string;windup:number;defeat:number;enraged:boolean};
+type Enemy={x:number;y:number;home:number;range:number;phase:number;hp:number;hit:number;kind:EnemyKind;mode:'patrol'|'windup'|'attack'|'recover';timer:number;aimX:number;aimY:number;direction:number;maxHp:number;id:string;windup:number;defeat:number;enraged:boolean;boss?:number;cycle?:number;pattern?:BossPattern};
 type Projectile={x:number;y:number;vx:number;vy:number;life:number;radius:number};
 export type MenuAction='pause'|'map'|'confirm'|'back'|'next'|'previous'|'focusLost'|'decrease'|'increase'|'well';
 /** Standard Gamepad mapping only; unknown layouts deliberately fall back to keyboard. */
@@ -22,7 +24,7 @@ export function gamepadButtons(pad:Pick<Gamepad,'mapping'|'axes'|'buttons'>){
 }
 type CombatText={x:number;y:number;text:string;color:string;life:number;max:number};
 type Particle={x:number;y:number;vx:number;vy:number;life:number;max:number;color:string;r:number};
-type Room={name:string;tint:string;platforms:Platform[];doors:Door[];enemies:Enemy[];motes:Mote[];shrine?:number;seed?:{x:number;y:number};ability?:{x:number;y:number;type:'dash'|'doubleJump'}};
+type Room={name:string;tint:string;stage?:number;part?:number;beacon?:{x:number;y:number};hazards?:Hazard[];platforms:Platform[];doors:Door[];enemies:Enemy[];motes:Mote[];shrine?:number;seed?:{x:number;y:number};ability?:{x:number;y:number;type:'dash'|'doubleJump'}};
 const W=2400,H=810,SAVE_KEY='luma-sunseed-v1';
 const rect=(x:number,y:number,w:number,h=55):Platform=>({x,y,w,h});
 const ground=(x:number,w:number)=>rect(x,705,w,180);
@@ -44,6 +46,17 @@ function rooms():Room[]{
   {name:'Moonpetal Sanctuary',tint:'#6668d140',platforms:[ground(0,700),ground(920,780),ground(1900,500),rect(350,550,220),rect(760,400,240),rect(1160,260,300),rect(1650,445,230),rect(2060,570,230)],doors:[{x:2310,y:705,to:3,label:'Windborne Canopy'}],enemies:[enemy(450,509,80),enemy(1000,660,80),enemy(1340,215,95,'sentry')],motes:[],shrine:2120,seed:{x:1300,y:205}},
   {name:'Sunspire Ruins',tint:'#e7a13320',platforms:[ground(0,900),ground(1110,1290),rect(470,565,260),rect(870,435,260),rect(1300,535,200),rect(1660,400,320),rect(2090,540,200)],doors:[{x:85,y:705,to:3,label:'Windborne Canopy'},{x:2210,y:705,to:2,label:'Amber Hollow'}],enemies:[enemy(650,521,110,'sentry'),enemy(1470,660,120,'charger'),enemy(1840,345,100,'keeper')],motes:[],shrine:300,seed:{x:1830,y:335}}
  ];
+ // Each biome is a four-area stage. Old entrance IDs retain their geometry and discoveries.
+ const beacons=[{x:1810,y:510},{x:1300,y:300},{x:1700,y:365},{x:1840,y:350},{x:1300,y:220},{x:1830,y:360}];
+ for(let stage=0;stage<6;stage++){
+  const ids=stageRooms(stage),base=r[stage],content=trials[stage];base.stage=stage;base.part=0;base.beacon=beacons[stage];
+  base.seed=undefined;base.enemies=base.enemies.filter(e=>e.kind!=='keeper');
+  base.doors=[...(stage?[{x:85,y:705,to:stageRooms(stage-1)[3],label:'Previous stage'}]:[]),{x:2310,y:705,to:ids[1],label:stages[stage].trial}];
+  r.push({name:stages[stage].trial,tint:base.tint,stage,part:1,platforms:(content.platforms as Platform[]).map(p=>({...p,moving:p.moving?{...p.moving}:undefined})),doors:[{x:85,y:705,to:stage,label:stages[stage].name},{x:2310,y:705,to:ids[2],label:stages[stage].gauntlet}],enemies:[enemy(2000,665,85,stage%2?'sentry':'charger')],motes:[],shrine:230,beacon:content.beacon,hazards:content.hazards});
+  r.push({name:stages[stage].gauntlet,tint:base.tint,stage,part:2,platforms:[ground(0,2400),rect(450,560,230),rect(840,420,260),rect(1210,280,260),rect(1560,420,260),rect(1920,560,240)],doors:[{x:85,y:705,to:ids[1],label:stages[stage].trial},{x:2310,y:705,to:ids[3],label:stages[stage].arena,trial:stage}],enemies:[enemy(530,660,110),enemy(880,660,140,'charger'),enemy(1330,235,90,'sentry'),enemy(1680,375,110,stage>1?'sentry':'drifter'),enemy(2030,660,120,'charger')],motes:[],shrine:230,beacon:{x:1340,y:240},hazards:stage>1?[{kind:'thorns',x:1110,y:677,w:110,h:28}]:[]});
+  const guardian=enemy(1530,645,680,'keeper');guardian.boss=stage;guardian.cycle=0;guardian.hp=guardian.maxHp=stages[stage].hp;
+  r.push({name:stages[stage].arena,tint:base.tint,stage,part:3,platforms:[ground(0,2400),rect(850,550,220),rect(1220,435,240),rect(1760,550,220)],doors:[{x:85,y:705,to:ids[2],label:stages[stage].gauntlet},...(stage<5?[{x:2310,y:705,to:stage+1,label:stages[stage+1].name,boss:stage}]:[])],enemies:[guardian],motes:[],shrine:230});
+ }
  r.forEach((room,ri)=>{room.enemies.forEach((e,ei)=>e.id=`${ri}-${ei}`);room.platforms.forEach((p,pi)=>{if(p.y<700){for(let i=0;i<3;i++)room.motes.push({x:p.x+45+i*(p.w-90)/2,y:p.y-38,id:`${ri}-${pi}-${i}`})}});for(let i=0;i<7;i++)room.motes.push({x:430+i*270,y:653,id:`${ri}-g-${i}`})});return r;
 }
 
@@ -62,21 +75,26 @@ export function sunwellOffers(state:Pick<Snapshot,'heartLevel'|'magnet'>){
 }
 
 /** Map metadata comes from the same passages used by the physics engine. */
-export const worldRegions=rooms().map((r,id)=>({id,name:r.name.replace(/^The /,''),doors:r.doors,hasSeed:!!r.seed,hasMemory:memoryBlooms.some(b=>b.room===id)}));
-export function journeyRoute(state:Pick<Snapshot,'room'|'dash'|'doubleJump'>,target:number):number[]{
+export const worldRegions=rooms().map((r,id)=>({id,name:r.name.replace(/^The /,''),doors:r.doors,stage:r.stage!,part:r.part!,hasSeed:[2,4,5].includes(r.stage!)&&r.part===3,hasMemory:memoryBlooms.some(b=>b.room===id)}));
+export function journeyRoute(state:Pick<Snapshot,'room'|'dash'|'doubleJump'|'bosses'|'beacons'>,target:number):number[]{
  const queue=[[state.room]],seen=new Set([state.room]);
  while(queue.length){const path=queue.shift()!,room=path[path.length-1];if(room===target)return path;
-  for(const door of worldRegions[room].doors){if(!seen.has(door.to)&&(!door.needs||state[door.needs])){seen.add(door.to);queue.push([...path,door.to])}}
+  for(const door of worldRegions[room].doors){if(!seen.has(door.to)&&unlockedStage(state,areaStage(door.to))&&(door.boss===undefined||state.bosses.includes(door.boss))&&(door.trial===undefined||stageBeacons(state,door.trial)===3)&&(!door.needs||state[door.needs])){seen.add(door.to);queue.push([...path,door.to])}}
  }return [];
 }
-export function journeyObjective(state:Pick<Snapshot,'room'|'dash'|'doubleJump'|'seeds'|'won'>){
- if(state.won)return {title:'The forest is singing again.',detail:'Every little light made a difference.',target:0,route:[] as number[]};
- let target=0,title='Bring the sunseeds home.',detail='Rest at the Waking Glade Sunwell to restore the forest.';
- if(!state.dash){target=1;title='Awaken Sun Dash.';detail='Find the golden light beyond the falls, near the eastern passage.'}
- else if(!state.doubleJump){target=2;title='Find the Sky Feather.';detail='Dash through the amber thorns, then jump onto the first high ledge.'}
- else if(state.seeds.length<3){const remaining=[2,4,5].filter(n=>!state.seeds.includes(n));target=remaining.sort((a,b)=>(journeyRoute(state,a).length||99)-(journeyRoute(state,b).length||99))[0];title=`Recover the ${worldRegions[target].name} sunseed.`;detail=target===2?'Double jump to the high amber ledge.':target===4?'Climb the moonlit terraces and free the seed from its sentry.':'Climb the ruins and strike the Keeper while it rests.'}
- const route=journeyRoute(state,target);
- if(state.room!==target&&route.length>1)detail=`Take the passage to ${worldRegions[route[1]].name}. ${detail}`;
+export function journeyObjective(state:Pick<Snapshot,'room'|'dash'|'doubleJump'|'seeds'|'won'|'bosses'|'beacons'|'enemiesLeft'>){
+ if(state.won)return {title:'Six guardians awake. The forest sings!',detail:'Every little light made a difference.',target:23,route:[] as number[]};
+ const stage=areaStage(state.room),ids=stageRooms(stage);
+ let target=state.room,title='',detail='';
+ if(state.bosses.includes(stage)){target=stage<5?stage+1:ids[3];title=stage<5?`Continue to ${stages[stage+1].name}.`:'The dawn is restored.';detail='The guardian has opened the eastern passage. You can also revisit earlier stages.'}
+ else if(stage===1&&!state.dash){target=1;title='Awaken Sun Dash.';detail='Find the golden light near the eastern passage.'}
+ else if(stage===2&&!state.doubleJump){target=2;title='Find the Sky Feather.';detail='Dash through the amber thorns, then jump onto the first high ledge.'}
+ else {const part=[0,1,2].find(n=>!state.beacons.includes(beaconId(stage,n)));
+  if(part!==undefined){target=ids[part];title=`Light the ${['exploration','trial','gauntlet'][part]} beacon.`;detail=part===0?'Find the golden beacon above the main trail, and interact beside it.':part===1?'Cross the shifting platforms and timed hazards. Find and activate the trail beacon.':'Climb the terraces, awaken every creature in the gauntlet, and activate its beacon.'}
+  else {target=ids[3];title=`Face ${stages[stage].boss}.`;detail=stages[stage].hint+' Clear every gauntlet creature to open the arena.'}
+ }
+ if(areaPart(state.room)===2&&state.beacons.includes(beaconId(stage,2))&&state.enemiesLeft>0){target=state.room;title=`Awaken ${state.enemiesLeft} remaining gauntlet creatures.`;detail='Every creature here must be awakened before the arena opens. Climb the terraces to find the sentries.'}
+ const route=journeyRoute(state,target);if(state.room!==target&&route.length>1)detail=`Take the passage to ${worldRegions[route[1]].name}. ${detail}`;
  return {title,detail,target,route};
 }
 
@@ -88,9 +106,9 @@ export function combatProfile(kind:EnemyKind,enraged=false){
 }
 
 export class Game {
- ready:Promise<void>;state:Snapshot={room:0,roomName:'The Waking Glade',health:5,maxHealth:5,heartLevel:0,magnet:false,discoveries:[],light:0,seeds:[],dash:false,doubleJump:false,visited:[0],shrines:[0],canTravel:false,time:0,won:false,message:'',controller:false,dashCharge:1,bossHealth:null,bossMaxHealth:8,bossIntent:'',combo:0,animation:'idle'};
+ ready:Promise<void>;state:Snapshot={room:0,roomName:'The Waking Glade',bosses:[],beacons:[],bossName:'',stage:0,part:0,enemiesLeft:0,health:5,maxHealth:5,heartLevel:0,magnet:false,discoveries:[],light:0,seeds:[],dash:false,doubleJump:false,visited:[0],shrines:[0],canTravel:false,time:0,won:false,message:'',controller:false,dashCharge:1,bossHealth:null,bossMaxHealth:8,bossIntent:'',combo:0,animation:'idle'};
  private preferences=readPreferences();private keyboardHeld=new Map<string,ControlAction>();private motionQuery:MediaQueryList|undefined;private musicBus:GainNode|null=null;private effectsBus:GainNode|null=null;
- private strikeBuffer=0;private combatTexts:CombatText[]=[];private respawns=0;private backdrops:HTMLImageElement[]=[];private runSheet=new Image();private padKeys=new Set<string>();private padPressed=new Set<string>();private padMenus=new Set<MenuAction>();private activePad:Gamepad|null=null;private gamepadActive=false;private projectiles:Projectile[]=[];private defeated=new Set<string>();private swingHits=new Set<string>();private combo=0;private comboWindow=0;private hitStop=0;private knockback=0;private landing=0;private runCycle=0;private stepDistance=0;private lastFacing=1;private reducedMotion=false;private backdropLoads=new Map<number,Promise<void>>();
+ private encounter:number|null=null;private bossHazards:Array<{x:number;timer:number;life:number;w:number;fired:boolean}>=[];private strikeBuffer=0;private combatTexts:CombatText[]=[];private respawns=0;private backdrops:HTMLImageElement[]=[];private runSheet=new Image();private padKeys=new Set<string>();private padPressed=new Set<string>();private padMenus=new Set<MenuAction>();private activePad:Gamepad|null=null;private gamepadActive=false;private projectiles:Projectile[]=[];private defeated=new Set<string>();private swingHits=new Set<string>();private combo=0;private comboWindow=0;private hitStop=0;private knockback=0;private landing=0;private runCycle=0;private stepDistance=0;private lastFacing=1;private reducedMotion=false;private backdropLoads=new Map<number,Promise<void>>();
  private ctx:CanvasRenderingContext2D;private bg=new Image();private sprite=new Image();private world=rooms();private keys=new Set<string>();private pressed=new Set<string>();private collected=new Set<string>();private broken=new Set<number>();private particles:Particle[]=[];private paused=true;private started=false;private stopped=false;private raf=0;private last=0;private accumulator=0;private elapsed=0;private messageUntil=0;private camera=0;private viewport=1440;private scale=1;private checkpoint={room:0,x:230,y:705};private saveAvailable=true;private mute=false;private audio:AudioContext|null=null;private music=0;private nextNote=0;private invincible=0;private shake=0;private attack=0;private attackCooldown=0;private dashTime=0;private dashCooldown=0;private coyote=0;private jumpBuffer=0;private usedDouble=false;private transition=0;private lastPublish=0;private safe={x:230,y:705};private player={x:230,y:705,vx:0,vy:0,face:1,grounded:true};private resize:ResizeObserver;private lifecycle=new AbortController();private ambient:Array<{x:number;y:number;s:number;phase:number}>=[];
  constructor(private canvas:HTMLCanvasElement,private onUpdate:(s:Snapshot)=>void,private onMenu:(action:MenuAction)=>void=()=>{}){
   this.ctx=canvas.getContext('2d',{alpha:false})!;
@@ -136,32 +154,38 @@ export class Game {
  hasSave(){try{return !!this.readSave()}catch{return false}}
  private readSave(){try{
   const raw=localStorage.getItem(SAVE_KEY);if(!raw)return null;const s=JSON.parse(raw);
-  if(!s||s.version!==1||!Number.isInteger(s.room)||s.room<0||s.room>5||!Array.isArray(s.seeds)||!s.seeds.every((x:unknown)=>typeof x==='number'&&[2,4,5].includes(x))||!Array.isArray(s.collected)||!Array.isArray(s.visited))return null;
+  if(!s||![1,2].includes(s.version)||!Number.isInteger(s.room)||s.room<0||s.room>=this.world.length||!Array.isArray(s.seeds)||!s.seeds.every((x:unknown)=>typeof x==='number'&&[2,4,5].includes(x))||!Array.isArray(s.collected)||!Array.isArray(s.visited))return null;
+  // Legacy journeys keep rewards and memories, but replay the new campaign gates.
+  s.bosses=s.version===2&&Array.isArray(s.bosses)?[...new Set<number>(s.bosses.filter((n:unknown)=>Number.isInteger(n)&&typeof n==='number'&&n>=0&&n<6))]:[];
+  s.bosses=s.bosses.filter((n:number)=>Array.from({length:n},(_,i)=>i).every(i=>s.bosses.includes(i)));
+  s.beacons=s.version===2&&Array.isArray(s.beacons)?[...new Set<string>(s.beacons.filter((id:unknown)=>typeof id==='string'&&/^[0-5]:[0-2]$/.test(id)&&unlockedStage(s,Number(id[0]))))]:[];
+  if(!unlockedStage(s,areaStage(s.room)))s.room=0;
+  if(s.version===1){s.checkpoint={room:0};s.visited=[0];s.shrines=[0];s.defeated=(Array.isArray(s.defeated)?s.defeated:[]).filter((id:unknown)=>typeof id==='string'&&id!=='5-2')}
   const checkpointRoom=s.checkpoint?.room;
   // Checkpoints are Sunwells, never arbitrary positions from corrupt saves.
-  const room=Number.isInteger(checkpointRoom)&&checkpointRoom>=0&&checkpointRoom<6?checkpointRoom:0;
+  const room=Number.isInteger(checkpointRoom)&&checkpointRoom>=0&&checkpointRoom<this.world.length&&unlockedStage(s,areaStage(checkpointRoom))?checkpointRoom:0;
   s.checkpoint={room,x:this.world[room].shrine!,y:705};
-  s.shrines=[...new Set([0,room,...(Array.isArray(s.shrines)?s.shrines.filter((n:unknown)=>typeof n==='number'&&Number.isInteger(n)&&n>=0&&n<6):[])])];
+  s.shrines=[...new Set([0,room,...(Array.isArray(s.shrines)?s.shrines.filter((n:unknown)=>typeof n==='number'&&Number.isInteger(n)&&n>=0&&n<this.world.length&&unlockedStage(s,areaStage(n))):[])])];
   s.heartLevel=Number.isInteger(s.heartLevel)&&s.heartLevel>=0&&s.heartLevel<=2?s.heartLevel:0;s.magnet=s.magnet===true;
   s.discoveries=[...new Set<string>(Array.isArray(s.discoveries)?s.discoveries.filter((id:unknown)=>memoryBlooms.some(b=>b.id===id)):[])];
-  return s;
+  s.legacy=s.version===1;s.won=s.version===2&&s.bosses.length===6;return s;
  }catch{return null}}
 
  start(resume=false){
-  this.clearInput();this.world=rooms();this.collected.clear();this.broken.clear();this.defeated.clear();this.particles=[];this.projectiles=[];this.swingHits.clear();this.combo=0;this.comboWindow=0;this.strikeBuffer=0;this.combatTexts=[];this.hitStop=0;this.landing=0;this.knockback=0;this.runCycle=0;this.stepDistance=0;this.lastPublish=0;this.state={room:0,roomName:'The Waking Glade',health:5,maxHealth:5,heartLevel:0,magnet:false,discoveries:[],light:0,seeds:[],dash:false,doubleJump:false,visited:[0],shrines:[0],canTravel:false,time:0,won:false,message:'',controller:false,dashCharge:1,bossHealth:null,bossMaxHealth:8,bossIntent:'',combo:0,animation:'idle'};this.checkpoint={room:0,x:230,y:705};
-  const s=resume?this.readSave():null;if(s){this.state={...this.state,room:s.room,heartLevel:s.heartLevel,maxHealth:5+s.heartLevel,health:5+s.heartLevel,magnet:s.magnet,discoveries:s.discoveries,seeds:[...new Set<number>(s.seeds)],dash:!!s.dash,doubleJump:!!s.doubleJump,light:Number.isFinite(s.light)?Math.max(0,Math.min(1000000,Math.floor(s.light))):0,visited:s.visited.filter((n:number)=>Number.isInteger(n)&&n>=0&&n<6),shrines:s.shrines,won:!!s.won&&new Set(s.seeds).size===3,time:Number.isFinite(s.time)?Math.max(0,s.time):0};this.collected=new Set(s.collected.filter((n:unknown)=>typeof n==='string'));this.broken=new Set(Array.isArray(s.broken)?s.broken.filter((n:unknown)=>n===2):[]);this.defeated=new Set(Array.isArray(s.defeated)?s.defeated.filter((n:unknown)=>typeof n==='string'):[]);for(const room of this.world)for(const e of room.enemies)if(this.defeated.has(e.id))e.hp=0;if(s.checkpoint&&Number.isInteger(s.checkpoint.room)&&s.checkpoint.room>=0&&s.checkpoint.room<6&&Number.isFinite(s.checkpoint.x))this.checkpoint=s.checkpoint;}
+  this.clearInput();this.world=rooms();this.collected.clear();this.broken.clear();this.defeated.clear();this.particles=[];this.projectiles=[];this.bossHazards=[];this.encounter=null;this.swingHits.clear();this.combo=0;this.comboWindow=0;this.strikeBuffer=0;this.combatTexts=[];this.hitStop=0;this.landing=0;this.knockback=0;this.runCycle=0;this.stepDistance=0;this.lastPublish=0;this.state={room:0,roomName:'The Waking Glade',bosses:[],beacons:[],bossName:'',stage:0,part:0,enemiesLeft:0,health:5,maxHealth:5,heartLevel:0,magnet:false,discoveries:[],light:0,seeds:[],dash:false,doubleJump:false,visited:[0],shrines:[0],canTravel:false,time:0,won:false,message:'',controller:false,dashCharge:1,bossHealth:null,bossMaxHealth:8,bossIntent:'',combo:0,animation:'idle'};this.checkpoint={room:0,x:230,y:705};
+  const s=resume?this.readSave():null;if(s){this.state={...this.state,room:s.room,bosses:s.bosses,beacons:s.beacons,heartLevel:s.heartLevel,maxHealth:5+s.heartLevel,health:5+s.heartLevel,magnet:s.magnet,discoveries:s.discoveries,seeds:[...new Set<number>(s.seeds)],dash:!!s.dash,doubleJump:!!s.doubleJump,light:Number.isFinite(s.light)?Math.max(0,Math.min(1000000,Math.floor(s.light))):0,visited:s.visited.filter((n:number)=>Number.isInteger(n)&&n>=0&&n<this.world.length&&unlockedStage(s,areaStage(n))),shrines:s.shrines,won:!!s.won&&s.bosses.length===6,time:Number.isFinite(s.time)?Math.max(0,s.time):0};this.collected=new Set(s.collected.filter((n:unknown)=>typeof n==='string'));this.broken=new Set(Array.isArray(s.broken)?s.broken.filter((n:unknown)=>n===2):[]);this.defeated=new Set(Array.isArray(s.defeated)?s.defeated.filter((n:unknown)=>typeof n==='string'):[]);for(const room of this.world)for(const e of room.enemies)if(e.boss!==undefined?this.state.bosses.includes(e.boss):this.defeated.has(e.id))e.hp=0;if(s.checkpoint&&Number.isInteger(s.checkpoint.room)&&s.checkpoint.room>=0&&s.checkpoint.room<this.world.length&&Number.isFinite(s.checkpoint.x))this.checkpoint=s.checkpoint;}
   this.player={x:s?this.checkpoint.x:230,y:705,vx:0,vy:0,face:1,grounded:true};this.state.room=s?this.checkpoint.room:0;this.state.roomName=this.world[this.state.room].name;if(!this.state.visited.includes(this.state.room))this.state.visited.push(this.state.room);this.safe={x:this.player.x,y:705};this.camera=Math.max(0,this.player.x-this.viewport*.35);this.invincible=0;this.attack=0;this.attackCooldown=0;this.dashTime=0;this.dashCooldown=0;this.transition=0;this.coyote=.1;this.jumpBuffer=0;this.usedDouble=false;this.started=true;this.paused=false;
   try{if(!this.audio||this.audio.state==='closed'){this.audio=new AudioContext();this.musicBus=this.audio.createGain();this.effectsBus=this.audio.createGain();this.musicBus.connect(this.audio.destination);this.effectsBus.connect(this.audio.destination);this.applyAudioPreferences();}if(!this.mute)this.audio.resume().catch(()=>{})}catch{}
-  this.toast(s?'Welcome back, little light.':'Follow the fireflies. Your adventure begins to the east.');this.save();this.publish();
+  this.toast(s?.legacy?'A bigger adventure awaits! Your rewards are safe. Begin the six-stage campaign at the Glade.':s?'Welcome back, little light.':'Light the high trail beacon, then follow the eastern passage. Six guardians await.');this.save();this.publish();
  }
- save(){if(!this.started)return;try{localStorage.setItem(SAVE_KEY,JSON.stringify({version:1,room:this.state.room,checkpoint:this.checkpoint,heartLevel:this.state.heartLevel,magnet:this.state.magnet,discoveries:this.state.discoveries,seeds:this.state.seeds,dash:this.state.dash,doubleJump:this.state.doubleJump,light:this.state.light,visited:this.state.visited,shrines:this.state.shrines,won:this.state.won,time:this.state.time,collected:[...this.collected],broken:[...this.broken],defeated:[...this.defeated]}))}catch{this.saveAvailable=false}}
+ save(){if(!this.started)return;try{localStorage.setItem(SAVE_KEY,JSON.stringify({version:2,bosses:this.state.bosses,beacons:this.state.beacons,room:this.state.room,checkpoint:this.checkpoint,heartLevel:this.state.heartLevel,magnet:this.state.magnet,discoveries:this.state.discoveries,seeds:this.state.seeds,dash:this.state.dash,doubleJump:this.state.doubleJump,light:this.state.light,visited:this.state.visited,shrines:this.state.shrines,won:this.state.won,time:this.state.time,collected:[...this.collected],broken:[...this.broken],defeated:[...this.defeated]}))}catch{this.saveAvailable=false}}
  destroy(){this.motionQuery?.removeEventListener?.('change',this.motionChanged);this.stopped=true;cancelAnimationFrame(this.raf);this.resize.disconnect();this.lifecycle.abort();window.removeEventListener('keydown',this.keydown);window.removeEventListener('keyup',this.keyup);window.removeEventListener('blur',this.blur);document.removeEventListener('visibilitychange',this.visibility);this.save();this.audio?.close().catch(()=>{})}
  private frame=(now:number)=>{if(this.stopped)return;this.pollGamepad();const dt=Math.min((now-(this.last||now))/1000,.05);this.last=now;this.elapsed+=dt;if(!this.paused&&!document.hidden&&!this.state.won){this.accumulator+=dt;while(this.accumulator>=1/120){this.update(1/120);this.accumulator-=1/120}}this.render();this.raf=requestAnimationFrame(this.frame)};
  private held(...keys:string[]){return keys.some(k=>this.keys.has(k)||this.padKeys.has(k))}
  private tap(...keys:string[]){return keys.some(k=>this.pressed.has(k)||this.padPressed.has(k))}
  private update(dt:number){
   if(this.hitStop>0){this.hitStop=Math.max(0,this.hitStop-dt);return}
-  const p=this.player,r=this.world[this.state.room];this.state.time+=dt;this.strikeBuffer=Math.max(0,this.strikeBuffer-dt);for(const text of this.combatTexts)text.life-=dt;this.combatTexts=this.combatTexts.filter(text=>text.life>0);this.comboWindow=Math.max(0,this.comboWindow-dt);this.knockback=Math.max(0,this.knockback-dt);this.landing=Math.max(0,this.landing-dt);this.invincible=Math.max(0,this.invincible-dt);this.attack=Math.max(0,this.attack-dt);this.attackCooldown=Math.max(0,this.attackCooldown-dt);this.dashTime=Math.max(0,this.dashTime-dt);this.dashCooldown=Math.max(0,this.dashCooldown-dt);this.transition=Math.max(0,this.transition-dt);this.shake=Math.max(0,this.shake-dt*25);this.jumpBuffer=Math.max(0,this.jumpBuffer-dt);this.coyote=Math.max(0,this.coyote-dt);
+  const p=this.player,r=this.world[this.state.room];this.state.time+=dt;this.updatePlatforms(dt);this.strikeBuffer=Math.max(0,this.strikeBuffer-dt);for(const text of this.combatTexts)text.life-=dt;this.combatTexts=this.combatTexts.filter(text=>text.life>0);this.comboWindow=Math.max(0,this.comboWindow-dt);this.knockback=Math.max(0,this.knockback-dt);this.landing=Math.max(0,this.landing-dt);this.invincible=Math.max(0,this.invincible-dt);this.attack=Math.max(0,this.attack-dt);this.attackCooldown=Math.max(0,this.attackCooldown-dt);this.dashTime=Math.max(0,this.dashTime-dt);this.dashCooldown=Math.max(0,this.dashCooldown-dt);this.transition=Math.max(0,this.transition-dt);this.shake=Math.max(0,this.shake-dt*25);this.jumpBuffer=Math.max(0,this.jumpBuffer-dt);this.coyote=Math.max(0,this.coyote-dt);
   if(this.state.message&&this.elapsed>this.messageUntil){this.state.message='';this.publish()}
   if(this.tap('Space','KeyW','ArrowUp'))this.jumpBuffer=.14;
   const dir=Number(this.held('KeyD','ArrowRight'))-Number(this.held('KeyA','ArrowLeft'));
@@ -183,31 +207,111 @@ export class Game {
   const oldY=p.y,oldX=p.x,wasGrounded=p.grounded;p.x+=p.vx*dt;
   if(this.dashTime<=0){const gravity=p.vy<0&&!this.held('Space','KeyW','ArrowUp')?2300:1550;p.vy=Math.min(1000,p.vy+gravity*dt)}
   p.y+=p.vy*dt;p.grounded=false;
-  for(const plat of r.platforms){if(p.x+18>plat.x&&p.x-18<plat.x+plat.w&&p.vy>=0&&oldY<=plat.y+2&&p.y>=plat.y){if(!wasGrounded&&p.vy>230){this.landing=.15;this.burst(p.x,plat.y,8,'#d6d3a0');this.tone(110,.06,'triangle',.015)}p.y=plat.y;p.vy=0;p.grounded=true;this.coyote=.12;this.usedDouble=false;if(plat.y===705){this.safe={x:p.x,y:p.y}}}}
+  for(const plat of r.platforms){if(p.x+18>plat.x&&p.x-18<plat.x+plat.w&&p.vy>=0&&oldY<=plat.y+2&&p.y>=plat.y){if(!wasGrounded&&p.vy>230){this.landing=.15;this.burst(p.x,plat.y,8,'#d6d3a0');this.tone(110,.06,'triangle',.015)}p.y=plat.y;p.vy=0;p.grounded=true;this.coyote=.12;this.usedDouble=false;if(plat.y===705&&!r.hazards?.some(h=>Math.abs(p.x-h.x)<h.w+30)){this.safe={x:p.x,y:p.y}}}}
   if(this.state.room===2&&!this.broken.has(2)&&p.x+18>590&&p.x-18<635&&p.y>430){if(this.dashTime>0){this.broken.add(2);this.burst(612,580,55,'#ffc478');this.shake=this.reducedMotion?0:8;this.toast('A new path opens. Keep growing, little light.');this.save()}else{p.x=oldX<610?571:654;p.vx=0;if(this.tap('KeyE','ArrowDown'))this.toast(`Amber thorns yield to Sun Dash. Press ${keyLabel(this.preferences.bindings.dash)}.`)}}
   p.x=Math.max(25,Math.min(W-25,p.x));
   if(p.y>H+130){this.hurt(true);this.pressed.clear();return}
-  const respawns=this.respawns;this.updateEnemies(dt);if(this.respawns!==respawns){this.clearInput();return}this.updateProjectiles(dt);if(this.respawns!==respawns){this.clearInput();return}
+  const respawns=this.respawns;this.updateHazards(dt);if(this.respawns!==respawns){this.clearInput();return}this.updateEnemies(dt);if(this.respawns!==respawns){this.clearInput();return}this.updateProjectiles(dt);if(this.respawns!==respawns){this.clearInput();return}
   for(const m of r.motes){if(!this.collected.has(m.id)&&Math.hypot(m.x-p.x,m.y-(p.y-35))<(this.state.magnet?105:44)){this.collected.add(m.id);this.state.light++;this.burst(m.x,m.y,8,'#fff0a3');this.tone(750+(this.state.light%5)*90,.09,'sine',.027);this.publish()}}
   if(r.ability&&!this.state[r.ability.type]&&Math.hypot(r.ability.x-p.x,r.ability.y-(p.y-35))<72){this.state[r.ability.type]=true;this.burst(r.ability.x,r.ability.y,65,'#f8e3a8');this.toast(r.ability.type==='dash'?`Sun Dash awakened! Press ${keyLabel(this.preferences.bindings.dash)} to burst through amber thorns.`:'Sky Feather awakened! Press jump again in the air.');this.chime();this.save();this.publish()}
   if(r.seed&&!this.state.seeds.includes(this.state.room)&&Math.hypot(r.seed.x-p.x,r.seed.y-(p.y-35))<65){const guardian=this.seedGuarded(r);if(!guardian){this.state.seeds.push(this.state.room);this.burst(r.seed.x,r.seed.y,90,'#ffdd78');this.toast(`Sunseed ${this.state.seeds.length} of 3 found. The forest feels a little brighter.`);this.chime();this.save();this.publish()}else if(this.tap('KeyE','ArrowDown'))this.toast(`Free the sunseed from its guardian. Press ${keyLabel(this.preferences.bindings.strike)} to strike.`)}
   if(this.tap('KeyE','ArrowDown')){
-   let used=this.discoverMemory();
-   if(!used&&r.shrine!==undefined&&Math.abs(r.shrine-p.x)<100&&Math.abs(p.y-705)<90){used=true;const newlyLit=!this.state.shrines.includes(this.state.room);if(newlyLit)this.state.shrines.push(this.state.room);this.state.health=this.state.maxHealth;this.checkpoint={room:this.state.room,x:r.shrine,y:705};this.burst(p.x,p.y-30,35,'#acffce');if(this.state.room===0&&this.state.seeds.length===3){this.state.won=true;this.chime();this.toast('The Sunwell is awake. Thank you, little guardian.')}else this.toast(!this.saveAvailable?'Hearts restored. Browser storage is unavailable.':newlyLit?'Sunwell lit! Let your gathered light help you grow.':'Hearts restored and saved. Take a moment to grow.');this.save();this.publish();if(!this.state.won)this.onMenu('well')}
-   if(!used){for(const door of r.doors){if(Math.abs(door.x-p.x)<105&&Math.abs(p.y-door.y)<100){used=true;if(door.needs&&!this.state[door.needs])this.toast('A Sky Feather will carry you to this hidden path.');else{this.enter(door.to);return}break}}
+   let used=this.activateBeacon()||this.discoverMemory();
+   if(!used&&r.shrine!==undefined&&Math.abs(r.shrine-p.x)<100&&Math.abs(p.y-705)<90){used=true;const newlyLit=!this.state.shrines.includes(this.state.room);if(newlyLit)this.state.shrines.push(this.state.room);this.state.health=this.state.maxHealth;this.checkpoint={room:this.state.room,x:r.shrine,y:705};this.burst(p.x,p.y-30,35,'#acffce');if(this.state.bosses.length===6){this.state.won=true;this.chime();this.toast('The Sunwell is awake. Thank you, little guardian.')}else this.toast(!this.saveAvailable?'Hearts restored. Browser storage is unavailable.':newlyLit?'Sunwell lit! Let your gathered light help you grow.':'Hearts restored and saved. Take a moment to grow.');this.save();this.publish();if(!this.state.won)this.onMenu('well')}
+   if(!used){for(const door of r.doors){if(Math.abs(door.x-p.x)<105&&Math.abs(p.y-door.y)<100){used=true;const blocked=this.doorBlocked(door);if(blocked)this.toast(blocked);else{this.enter(door.to);return}break}}
    }
-   if(!used&&this.state.room===0&&this.state.seeds.length<3&&p.x<350)this.toast('Bring three sunseeds to the Sunwell to awaken the forest.');
+   if(!used&&this.state.room===0&&this.state.seeds.length<3&&p.x<350)this.toast('Light three beacons in each stage, then awaken its guardian to open the next stage.');
   }
   for(const q of this.particles){q.life-=dt;q.x+=q.vx*dt;q.y+=q.vy*dt;q.vy+=100*dt}this.particles=this.particles.filter(q=>q.life>0);
   if(this.dashTime>0)this.particles.push({x:p.x,y:p.y-30,vx:-p.face*35,vy:0,life:.3,max:.3,color:'#ffe6a1',r:18});
   if(p.grounded&&Math.abs(p.vx)>40){this.runCycle+=Math.abs(p.vx)*dt*.04;this.stepDistance+=Math.abs(p.vx)*dt;if(this.stepDistance>90){this.stepDistance=0;this.burst(p.x-p.face*18,p.y-3,2,'#d4d7b0');this.tone(160+Math.random()*30,.035,'triangle',.007)}}
   this.state.animation=this.dashTime>0?'dash':this.attack>0?'strike':this.knockback>0?'hurt':!p.grounded?p.vy<0?'jump':'fall':this.landing>0?'land':Math.abs(p.vx)>40?'run':'idle';
-  this.state.dashCharge=Math.max(0,1-this.dashCooldown/.7);const boss=r.enemies.find(e=>e.kind==='keeper'&&e.hp>0);this.state.bossHealth=boss&&Math.abs(boss.x-p.x)<750?boss.hp:null;
+  this.state.dashCharge=Math.max(0,1-this.dashCooldown/.7);const boss=r.enemies.find(e=>e.boss!==undefined&&e.hp>0);this.state.bossHealth=boss&&Math.abs(boss.x-p.x)<750?boss.hp:null;
   this.camera+=(Math.max(0,Math.min(W-this.viewport,p.x-this.viewport*.4))-this.camera)*Math.min(1,dt*5);
   if(this.elapsed>this.nextNote){const notes=[261.63,329.63,392,523.25,440,392,329.63,293.66];this.tone(notes[this.music++%notes.length],1.7,'sine',.014,'music');this.nextNote=this.elapsed+1.4}
   if(this.state.time-this.lastPublish>.1){this.lastPublish=this.state.time;this.publish()}
   this.pressed.clear();this.padPressed.clear();
  }
+ private activateBeacon(){
+  const r=this.world[this.state.room],b=r.beacon,id=beaconId(areaStage(this.state.room),areaPart(this.state.room));
+  if(!b||this.state.beacons.includes(id)||Math.hypot(b.x-this.player.x,b.y-(this.player.y-35))>85)return false;
+  this.state.beacons.push(id);this.state.light+=10;this.burst(b.x,b.y,50,'#fff1b4');this.chime();this.toast(`Trail beacon ${stageBeacons(this.state,areaStage(this.state.room))} / 3 lit · +10 light. ${stageBeacons(this.state,areaStage(this.state.room))===3?'Clear the gauntlet to reach the guardian.':'The next challenge awaits.'}`);this.save();this.publish();return true;
+ }
+ private doorBlocked(door:Door){
+  if(!unlockedStage(this.state,areaStage(door.to))||door.boss!==undefined&&!this.state.bosses.includes(door.boss))return 'Awaken this stage’s guardian to open the next stage.';
+  if(door.trial!==undefined){if(stageBeacons(this.state,door.trial)<3)return 'The arena is sealed. Activate the exploration, trial, and gauntlet beacons first.';if(this.world[stageRooms(door.trial)[2]].enemies.some(e=>e.hp>0))return 'Awaken every creature in the gauntlet before facing the guardian.'}
+  if(door.needs&&!this.state[door.needs])return 'Return with the required movement ability.';
+  return '';
+ }
+ private bossActive(){return this.encounter!==null}
+ private resetBosses(){
+  for(const room of this.world)for(const e of room.enemies)if(e.boss!==undefined&&!this.state.bosses.includes(e.boss)){e.hp=e.maxHp;e.x=e.home;e.y=645;e.mode='patrol';e.timer=.6;e.cycle=0;e.enraged=false;e.hit=0}
+  this.encounter=null;this.bossHazards=[];
+ }
+ private completeStage(e:Enemy){
+  const stage=e.boss!;if(!this.state.bosses.includes(stage))this.state.bosses.push(stage);
+  if([2,4,5].includes(stage)&&!this.state.seeds.includes(stage))this.state.seeds.push(stage);
+  this.encounter=null;this.projectiles=[];this.bossHazards=[];this.state.health=this.state.maxHealth;
+  this.checkpoint={room:this.state.room,x:230,y:705};if(!this.state.shrines.includes(this.state.room))this.state.shrines.push(this.state.room);
+  this.chime();this.burst(e.x,e.y,100,stages[stage].color);
+  if(this.state.bosses.length===6){this.state.won=true;this.toast('All six guardians awake. The sunseeds restore the dawn.')}else this.toast(`${stages[stage].boss} awakened! Stage ${stage+1} complete · +40 light. The passage to ${stages[stage+1].name} is open.`);
+ }
+ private updatePlatforms(dt:number){
+  const r=this.world[this.state.room];
+  for(const plat of r.platforms){if(!plat.moving)continue;const m=plat.moving,oldX=plat.x,oldY=plat.y;
+   const aboard=this.player.grounded&&Math.abs(this.player.y-oldY)<3&&this.player.x+18>oldX&&this.player.x-18<oldX+plat.w;
+   plat[m.axis]=m.origin+Math.sin(this.state.time/m.period*Math.PI*2+m.phase)*m.range;
+   const dx=plat.x-oldX,dy=plat.y-oldY;if(aboard){this.player.x+=dx;this.player.y+=dy}
+   const index=r.platforms.indexOf(plat);for(const mote of r.motes.filter(q=>q.id.startsWith(`${this.state.room}-${index}-`))){mote.x+=dx;mote.y+=dy}
+  }
+ }
+ private hazardShape(h:Hazard){
+  const phase=((this.state.time+(h.offset||0))%(h.period||5))/(h.period||5);
+  return {x:h.kind==='swing'?h.x+Math.sin(phase*Math.PI*2)*(h.range||140):h.x,y:h.y,w:h.w,h:h.h,active:h.kind!=='jet'||phase>.45&&phase<.8,warning:h.kind==='jet'&&phase>.25&&phase<=.45};
+ }
+ private updateHazards(dt:number){
+  const p=this.player;
+  for(const h of this.world[this.state.room].hazards||[]){const q=this.hazardShape(h);if(q.active&&p.x+16>q.x&&p.x-16<q.x+q.w&&p.y>q.y&&p.y-65<q.y+q.h&&this.dashTime<=0){const n=this.respawns;this.hurt(false);if(n!==this.respawns)return}}
+  for(const q of this.bossHazards){q.timer-=dt;if(q.timer<=0){q.life-=dt;if(!q.fired){q.fired=true;this.burst(q.x,670,16,'#ffcba0')}
+    if(Math.abs(p.x-q.x)<q.w/2+16&&p.y>510&&this.dashTime<=0){const n=this.respawns;this.hurt(false);if(n!==this.respawns)return}
+   }}this.bossHazards=this.bossHazards.filter(q=>q.life>0);
+ }
+ private updateBoss(e:Enemy,dt:number){
+  const stage=e.boss!,p=this.player;e.hit=Math.max(0,e.hit-dt);e.phase+=dt;
+  if(this.encounter===null){if(p.x<650)return;this.encounter=this.state.room;e.timer=.5;this.toast(`${stages[stage].boss} · ${stages[stage].hint}`)}
+  p.x=Math.max(590,Math.min(2190,p.x));e.timer=Math.max(0,e.timer-dt);
+  const assist=this.preferences.assist,profile=bossAttack(stage,e.cycle||0,e.hp,e.maxHp,assist),phase=profile.phase,speed=profile.projectileSpeed/225;
+  if(e.mode==='patrol'&&e.timer<=0){
+   e.pattern=profile.pattern;e.aimX=p.x;e.aimY=p.y-35;e.direction=Math.sign(p.x-e.x)||1;
+   e.mode='windup';e.windup=profile.windup;e.timer=e.windup;this.tone(140+stage*20,.18,'sine',.025);
+  }else if(e.mode==='windup'&&e.timer<=0){
+   e.mode='attack';e.timer=e.pattern==='charge'?profile.chargeDuration:.25;
+   if(e.pattern==='slam')for(const side of [-1,1])for(let n=0;n<(phase>1?2:1);n++)this.projectiles.push({x:e.x+side*65,y:682-n*55,vx:side*270*speed,vy:0,life:5,radius:12});
+   if(e.pattern==='fan'||e.pattern==='spiral'){
+    const angle=e.pattern==='spiral'?0:Math.atan2(e.aimY-e.y,e.aimX-e.x);
+    for(const offset of profile.spread){const a=angle+offset;this.projectiles.push({x:e.x,y:e.y,vx:Math.cos(a)*profile.projectileSpeed,vy:Math.sin(a)*profile.projectileSpeed,life:5,radius:10})}
+   }
+   if(e.pattern==='rain'||e.pattern==='eruption')for(const offset of profile.marks)this.bossHazards.push({x:Math.max(650,Math.min(2110,e.aimX+offset)),timer:assist?1.5:1.05,life:.65,w:e.pattern==='rain'?65:85,fired:false});
+  }else if(e.mode==='attack'){
+   if(e.pattern==='charge')e.x=Math.max(800,Math.min(2040,e.x+e.direction*profile.chargeSpeed*dt));
+   if(e.timer<=0){e.mode='recover';e.timer=profile.recovery;e.cycle=(e.cycle||0)+1;this.publish()}
+  }else if(e.mode==='recover'&&e.timer<=0){e.mode='patrol';e.timer=.35}
+  if(e.mode!=='recover'&&Math.abs(e.x-p.x)<65&&Math.abs(e.y-(p.y-35))<65&&this.dashTime<=0)this.hurt(false);
+ }
+ private drawChallenges(t:number){
+  const c=this.ctx,r=this.world[this.state.room],b=r.beacon;
+  for(const h of r.hazards||[]){const q=this.hazardShape(h);
+   if(h.kind==='swing'){c.strokeStyle='#b6bd9b';c.lineWidth=3;c.beginPath();c.moveTo(h.x,100);c.lineTo(q.x+q.w/2,q.y);c.stroke();this.glow(q.x+q.w/2,q.y+q.h/2,45,'#ffc28b44');c.fillStyle='#ab705c';c.beginPath();c.arc(q.x+q.w/2,q.y+q.h/2,q.w/2,0,Math.PI*2);c.fill();for(let i=0;i<8;i++)this.drawLeaf(q.x+q.w/2,q.y+q.h/2,29,7,i*Math.PI/4,'#e1aa82')}
+   else if(h.kind==='thorns'){for(let x=q.x;x<q.x+q.w;x+=18){c.fillStyle='#bc8064';c.beginPath();c.moveTo(x,705);c.lineTo(x+9,677);c.lineTo(x+18,705);c.fill()}this.glow(q.x+q.w/2,687,60,'#ffd5a322')}
+   else{c.fillStyle=q.active?'#ffc49166':q.warning?'#ffd5a733':'#74babc22';c.fillRect(q.x,q.active?q.y:685,q.w,q.active?q.h:20);c.strokeStyle=q.active?'#ffe2b0':q.warning?'#ffc896':'#88afae';c.setLineDash(q.warning?[6,6]:[]);c.strokeRect(q.x,q.y,q.w,q.h);c.setLineDash([]);if(Math.abs(this.player.x-q.x)<240)this.label(q.active?'VENT · JUMP OR DASH':q.warning?'VENT RISING':'VENT RESTING',q.x+q.w/2,q.y-20,'#ffe7c5',11)}
+  }
+  for(const q of this.bossHazards){c.fillStyle=q.timer>0?'#ffd19933':'#ffe6aa99';c.fillRect(q.x-q.w/2,q.timer>0?684:500,q.w,q.timer>0?21:205);c.strokeStyle='#ffdfae';c.setLineDash(q.timer>0?[5,5]:[]);c.strokeRect(q.x-q.w/2,500,q.w,205);c.setLineDash([]);if(q.timer>0)this.label('MOVE',q.x,474,'#ffe1bb',12)}
+  if(b){const lit=this.state.beacons.includes(beaconId(areaStage(this.state.room),areaPart(this.state.room))),close=Math.hypot(b.x-this.player.x,b.y-(this.player.y-35))<85;
+   this.glow(b.x,b.y,lit?70:100,lit?'#bcffd22a':'#ffda8055');c.save();c.translate(b.x,b.y);c.strokeStyle=lit?'#b7f2ce':'#ffe2a2';c.lineWidth=3;c.beginPath();c.moveTo(0,-25);c.lineTo(19,0);c.lineTo(0,25);c.lineTo(-19,0);c.closePath();c.stroke();c.fillStyle=lit?'#b7f2ce':'#ffe2a2';c.beginPath();c.arc(0,0,7,0,Math.PI*2);c.fill();c.restore();this.label(lit?'BEACON LIT':close?(this.state.controller?'Y':keyLabel(this.preferences.bindings.interact))+' · Light beacon':'TRAIL BEACON',b.x,b.y-42,lit?'#c0f8da':'#ffe4ad',12);
+  }
+  if(this.bossActive()){c.fillStyle='#ffe1a144';c.fillRect(570,360,12,345);this.label('GUARDIAN BATTLE',590,332,'#ffe1a1',12)}
+ }
+
  private discoverMemory(){
   const bloom=memoryBlooms.find(b=>b.room===this.state.room&&!this.state.discoveries.includes(b.id)&&Math.hypot(b.x-this.player.x,b.y-(this.player.y-35))<72);
   if(!bloom)return false;
@@ -223,11 +327,12 @@ export class Game {
   this.burst(this.player.x,this.player.y-35,40,id==='heart'?'#ffe4b0':'#c5f3d7');this.toast(id==='heart'?`Heartwood grows. You now have ${this.state.maxHealth} hearts.`:'Glowkeeper awakened. Nearby light follows you.');this.save();this.publish();return true;
  }
  private settlePlayer(x:number,y=705,face=1){
-  this.clearInput();this.projectiles=[];this.swingHits.clear();this.attack=0;this.attackCooldown=0;this.combo=0;this.comboWindow=0;this.strikeBuffer=0;this.combatTexts=[];this.dashTime=0;this.dashCooldown=0;this.usedDouble=false;this.hitStop=0;this.knockback=0;this.jumpBuffer=0;this.coyote=.12;this.landing=0;
-  this.player={x,y,vx:0,vy:0,face,grounded:true};this.safe={x,y};this.invincible=this.preferences.assist?2.4:1.6;this.state.bossHealth=null;this.state.bossIntent='';this.state.combo=0;this.state.animation='idle';this.state.dashCharge=1;this.camera=Math.max(0,Math.min(W-this.viewport,x-this.viewport*.4));this.transition=.6;void this.loadBackdrop(this.state.room);
+  this.clearInput();this.encounter=null;this.projectiles=[];this.bossHazards=[];this.swingHits.clear();this.attack=0;this.attackCooldown=0;this.combo=0;this.comboWindow=0;this.strikeBuffer=0;this.combatTexts=[];this.dashTime=0;this.dashCooldown=0;this.usedDouble=false;this.hitStop=0;this.knockback=0;this.jumpBuffer=0;this.coyote=.12;this.landing=0;
+  this.player={x,y,vx:0,vy:0,face,grounded:true};this.safe={x,y};this.invincible=this.preferences.assist?2.4:1.6;this.state.bossHealth=null;this.state.bossIntent='';this.state.combo=0;this.state.animation='idle';this.state.dashCharge=1;this.camera=Math.max(0,Math.min(W-this.viewport,x-this.viewport*.4));this.transition=.6;void this.loadBackdrop(areaStage(this.state.room));
  }
  private enter(to:number){
-  const previous=this.state.room,r=this.world[to],back=r.doors.find(d=>d.to===previous);
+  if(!Number.isInteger(to)||to<0||to>=this.world.length||!unlockedStage(this.state,areaStage(to)))return false;
+  const previous=this.state.room,r=this.world[to],gate=this.world[previous].doors.find(d=>d.to===to);if(!gate||this.doorBlocked(gate))return false;const back=r.doors.find(d=>d.to===previous);
   this.state.room=to;this.state.roomName=r.name;if(!this.state.visited.includes(to))this.state.visited.push(to);
   this.settlePlayer(back?back.x+(back.x<300?105:back.x>2100?-105:0):300,back?back.y:705,back&&back.x>2100?-1:1);
   // Merely entering an area must not activate a Sunwell or move the checkpoint past a gate.
@@ -235,13 +340,13 @@ export class Game {
  }
  private atSunwell(){const shrine=this.world[this.state.room].shrine;return shrine!==undefined&&this.state.shrines.includes(this.state.room)&&Math.abs(this.player.x-shrine)<100&&Math.abs(this.player.y-705)<20&&this.player.grounded}
  travelTo(to:number){
-  if(!this.started||!this.paused||this.state.won||!Number.isInteger(to)||to<0||to>=this.world.length||to===this.state.room||!this.state.shrines.includes(to)||!this.atSunwell())return false;
+  if(!this.started||!this.paused||this.state.won||!Number.isInteger(to)||to<0||to>=this.world.length||to===this.state.room||!unlockedStage(this.state,areaStage(to))||areaPart(to)===3&&!this.state.bosses.includes(areaStage(to))&&(stageBeacons(this.state,areaStage(to))<3||this.world[stageRooms(areaStage(to))[2]].enemies.some(e=>e.hp>0))||!this.state.shrines.includes(to)||!this.atSunwell())return false;
   this.state.room=to;this.state.roomName=this.world[to].name;this.state.health=this.state.maxHealth;const x=this.world[to].shrine!;
   if(!this.state.visited.includes(to))this.state.visited.push(to);this.checkpoint={room:to,x,y:705};this.settlePlayer(x);this.save();this.chime();this.toast(`The light carries you to ${worldRegions[to].name}.`);this.publish();return true;
  }
  private hurt(fall:boolean){
   if(this.invincible>0&&!fall)return;if(!fall||!this.preferences.assist)this.state.health--;this.invincible=this.preferences.assist?2.4:1.6;this.shake=this.reducedMotion?0:6;this.rumble(.35,120);this.burst(this.player.x,this.player.y-25,22,'#ffb991');this.tone(130,.18,'triangle',.06);
-  if(this.state.health<=0){this.respawns++;this.state.health=this.state.maxHealth;this.state.room=this.checkpoint.room;this.state.roomName=this.world[this.state.room].name;this.settlePlayer(this.checkpoint.x);this.toast('A little rest, a little courage. Your light is safe.');this.save()}
+  if(this.state.health<=0){this.resetBosses();this.respawns++;this.state.health=this.state.maxHealth;this.state.room=this.checkpoint.room;this.state.roomName=this.world[this.state.room].name;this.settlePlayer(this.checkpoint.x);this.toast('A little rest, a little courage. Your light is safe.');this.save()}
   else if(fall){this.player.x=this.safe.x;this.player.y=this.safe.y;this.player.vx=0;this.player.vy=0;this.toast('The forest caught you. Try another leap.')}
   else{this.knockback=.16;this.player.vx=-this.player.face*240;this.player.vy=-220}
   this.dashTime=0;this.publish();
@@ -277,13 +382,14 @@ export class Game {
   if(e.kind!=='keeper'){e.mode='recover';e.timer=.65;e.x=Math.max(e.home-e.range-75,Math.min(e.home+e.range+75,e.x+this.player.face*24));}
   this.combatText(e.x+(e.kind==='keeper'?this.player.face*95:0),e.y-45,e.hp<=0?'AWAKE':this.combo===3?'2 · FINISH':'1');
   this.hitStop=this.combo===3?.055:.035;this.shake=this.reducedMotion?0:this.combo===3?6:3;this.burst(e.x,e.y,this.combo===3?30:18,'#ffe8a4');this.rumble(this.combo===3?.25:.12,70);this.tone(this.combo===3?330:640,.09,'triangle',.035);
-  if(e.kind==='keeper'&&e.hp>0&&e.hp<=4&&!e.enraged){e.enraged=true;this.toast('The Keeper gathers more light. Watch for a wider fan.');this.burst(e.x,e.y,30,'#ffd58d');}
-  if(e.hp<=0){e.defeat=.65;this.defeated.add(e.id);this.state.light+=e.kind==='keeper'?15:3;this.tone(880,.16,'sine',.05);if(e.kind==='keeper'){this.projectiles=[];this.toast('The Keeper is awake. Its sunseed is yours.')}this.save();this.publish()}
+  if(e.kind==='keeper'&&e.hp>0&&e.hp<=e.maxHp/2&&!e.enraged){e.enraged=true;this.toast(e.boss!==undefined?`${stages[e.boss].boss} enters phase ${bossPhase(e.hp,e.maxHp,e.boss)}. Read its next warning.`:'The Keeper gathers more light. Watch for a wider fan.');this.burst(e.x,e.y,30,'#ffd58d');}
+  if(e.hp<=0){e.defeat=.65;this.defeated.add(e.id);this.state.light+=e.boss!==undefined?40:e.kind==='keeper'?15:3;this.tone(880,.16,'sine',.05);if(e.boss!==undefined){this.completeStage(e)}else if(e.kind==='keeper'){this.projectiles=[];this.toast('The Keeper is awake. Its sunseed is yours.')}this.save();this.publish()}
  }
  private updateEnemies(dt:number){
   const p=this.player;
   for(const e of this.world[this.state.room].enemies){
    if(e.hp<=0){e.defeat=Math.max(0,e.defeat-dt);continue}
+   if(e.boss!==undefined){this.updateBoss(e,dt);continue}
    e.phase+=dt*.8;e.hit=Math.max(0,e.hit-dt);e.timer=Math.max(0,e.timer-dt);
    const profile=this.enemyProfile(e);
    const close=Math.abs(p.x-e.x)<(e.kind==='keeper'?580:e.kind==='sentry'?470:320)&&Math.abs(p.y-35-e.y)<(e.kind==='charger'?100:330);
@@ -330,13 +436,19 @@ export class Game {
   }
   for(const e of this.world[this.state.room].enemies){
    if(e.hp<=0&&e.defeat<=0)continue;
-   const motion=this.reducedMotion?0:1,y=e.y+Math.sin(e.phase*3)*9,boss=e.kind==='keeper',radius=boss?48:e.kind==='charger'?30:27,alive=e.hp>0;
-   const color=e.kind==='charger'?'#edba85':e.kind==='sentry'?'#98dfd7':boss?'#edd082':'#c3a5d7',windup=e.mode==='windup'&&alive,open=e.mode==='recover'&&alive;
+   const motion=this.reducedMotion?0:1,y=e.y+Math.sin(e.phase*3)*9,boss=e.kind==='keeper',radius=boss?65:e.kind==='charger'?30:27,alive=e.hp>0;
+   const color=e.boss!==undefined?stages[e.boss].color:e.kind==='charger'?'#edba85':e.kind==='sentry'?'#98dfd7':boss?'#edd082':'#c3a5d7',windup=e.mode==='windup'&&alive,open=e.mode==='recover'&&alive;
    c.save();if(!alive)c.globalAlpha=e.defeat/.65;this.glow(e.x,y,boss?90:48,(open?'#baf1b5':color)+'33');c.restore();
    if(windup){
     const progress=1-e.timer/(e.windup||this.enemyProfile(e).windup);
     c.save();c.strokeStyle='#ffe0a7';c.lineWidth=2;c.setLineDash([6,7]);c.globalAlpha=.75;
-    if(e.kind==='charger'){
+    if(e.boss!==undefined){
+     const profile=bossAttack(e.boss,e.cycle||0,e.hp,e.maxHp,this.preferences.assist);
+     if(e.pattern==='charge'){const lane=profile.chargeSpeed*profile.chargeDuration;c.fillStyle='#ffc77822';c.fillRect(e.direction>0?e.x:e.x-lane,y-30,lane,60);c.strokeRect(e.direction>0?e.x:e.x-lane,y-30,lane,60)}
+     else if(e.pattern==='slam'){c.strokeStyle='#ffdb9e';for(const side of [-1,1]){c.beginPath();c.moveTo(e.x+side*70,683);c.lineTo(e.x+side*360,683);c.stroke();this.label('JUMP',e.x+side*180,654,'#ffe2b4',12)}}
+     else if(e.pattern==='rain'||e.pattern==='eruption'){for(const offset of profile.marks)c.strokeRect(Math.max(650,Math.min(2110,e.aimX+offset))-35,500,70,205)}
+     else {const angle=e.pattern==='spiral'?0:Math.atan2(e.aimY-e.y,e.aimX-e.x);for(const offset of profile.spread){c.beginPath();c.moveTo(e.x,e.y);c.lineTo(e.x+Math.cos(angle+offset)*260,e.y+Math.sin(angle+offset)*260);c.strokeStyle='#072729dd';c.lineWidth=6;c.stroke();c.strokeStyle='#ffe0a7';c.lineWidth=2;c.stroke()}}
+    }else if(e.kind==='charger'){
      c.fillStyle='#ffc77822';c.fillRect(e.direction>0?e.x:e.x-240,y-24,240,48);c.strokeRect(e.direction>0?e.x:e.x-240,y-24,240,48);
      for(let n=1;n<=3;n++){const x=e.x+e.direction*n*65;c.beginPath();c.moveTo(x-e.direction*8,y-8);c.lineTo(x,y);c.lineTo(x-e.direction*8,y+8);c.stroke()}
     }else{
@@ -345,22 +457,22 @@ export class Game {
     }
     c.setLineDash([]);c.globalAlpha=1;c.strokeStyle='#132c2bcc';c.lineWidth=5;c.beginPath();c.arc(e.x,y,radius+13,0,Math.PI*2);c.stroke();c.strokeStyle='#ffe0a7';c.beginPath();c.arc(e.x,y,radius+13,-Math.PI/2,-Math.PI/2+Math.PI*2*Math.max(0,progress));c.stroke();c.restore();
    }
-   c.save();c.translate(e.x,y);
+   c.save();c.translate(e.x,y);if(e.boss!==undefined){c.scale(1.35,1.35);const rays=4+e.boss;for(let i=0;i<rays;i++)this.drawLeaf(0,-16,55,12,-Math.PI+(i/(rays-1))*Math.PI,stages[e.boss].color);if(e.boss%2===0){c.strokeStyle=stages[e.boss].color;c.lineWidth=5;c.beginPath();c.moveTo(-23,-20);c.quadraticCurveTo(-55,-70,-32,-88);c.moveTo(23,-20);c.quadraticCurveTo(55,-70,32,-88);c.stroke()}}
    if(!alive){const remaining=e.defeat/.65;c.globalAlpha=remaining;if(motion){c.translate(0,-(1-remaining)*30);c.scale(.6+remaining*.4,.6+remaining*.4)}}
    const breathing=1+Math.sin(t*3+e.phase)*.025*motion;c.scale(breathing,breathing);
    const shell=c.createLinearGradient(-30,-30,30,30);shell.addColorStop(0,e.hit>0?'#fff2cb':open?'#648264':'#596757');shell.addColorStop(1,e.hit>0?'#d3e4b9':'#1c3031');c.fillStyle=shell;c.strokeStyle=color;c.lineWidth=2;
-   if(e.kind==='drifter'){
+   if(e.kind==='drifter'||e.boss===3){
     for(const side of [-1,1]){c.save();c.scale(side,1);const flap=Math.sin(t*8+e.phase)*.15*motion;this.drawLeaf(3,-3,33,21,-.3+flap,e.hit>0?'#ffe6b4':'#aa95b6');this.drawLeaf(4,8,24,13,.38-flap,'#696c87');c.restore()}
     c.beginPath();c.ellipse(0,0,11,22,0,0,Math.PI*2);c.fill();c.stroke();c.beginPath();c.moveTo(-5,-18);c.quadraticCurveTo(-17,-32,-20,-26);c.moveTo(5,-18);c.quadraticCurveTo(17,-32,20,-26);c.stroke();
-   }else if(e.kind==='charger'){
-    c.scale(e.direction,1);const lean=windup?-.09:e.mode==='attack'?.1:0;c.rotate(lean);
+   }else if(e.kind==='charger'||e.boss===0||e.boss===2){
+    if(e.boss!==undefined){c.scale(1.55,1.55);c.strokeStyle=stages[e.boss].color;c.lineWidth=2;c.beginPath();c.arc(0,0,35,-Math.PI*.9,Math.PI*.9);c.stroke()}c.scale(e.direction,1);const lean=windup?-.09:e.mode==='attack'?.1:0;c.rotate(lean);
     c.strokeStyle='#d9bd8b';c.lineWidth=3;
     for(const x of [-18,0,18]){const step=e.mode==='attack'?Math.sin(t*23+x)*4*motion:Math.sin(t*4+x)*2*motion;c.beginPath();c.moveTo(x,10);c.lineTo(x-9,23+step);c.lineTo(x-16,25+step);c.stroke()}
     c.strokeStyle=color;c.beginPath();c.ellipse(-3,0,28,21,0,0,Math.PI*2);c.fill();c.stroke();c.beginPath();c.moveTo(-3,-20);c.lineTo(-3,19);c.stroke();c.fillStyle='#6b4d3b';c.beginPath();c.ellipse(23,0,12,15,0,0,Math.PI*2);c.fill();c.stroke();
     c.fillStyle='#dfc28d';c.beginPath();c.moveTo(29,-4);c.quadraticCurveTo(45,-9,44,-25);c.quadraticCurveTo(51,-3,34,7);c.closePath();c.fill();
     c.fillStyle='#fff2c2';c.beginPath();c.arc(25,-5,3,0,Math.PI*2);c.fill();
-   }else if(e.kind==='sentry'){
-    const turn=t*.22*motion;
+   }else if(e.kind==='sentry'||e.boss===4){
+    if(e.boss!==undefined)c.scale(1.35,1.35);const turn=t*.22*motion;
     for(let i=0;i<6;i++)this.drawLeaf(0,0,35,12,turn+i*Math.PI/3,windup?'#d0e6b5':'#659d91');
     c.fillStyle=shell;c.beginPath();c.arc(0,0,17,0,Math.PI*2);c.fill();c.strokeStyle=color;c.stroke();
     c.strokeStyle='#aee9cb88';c.beginPath();c.arc(0,0,25,0,Math.PI*2);c.stroke();
@@ -377,7 +489,7 @@ export class Game {
    if(e.kind==='drifter'){c.fillStyle='#fff0bd';c.beginPath();c.arc(-4,-7,2.5,0,Math.PI*2);c.arc(4,-7,2.5,0,Math.PI*2);c.fill()}
    c.restore();
    if(alive&&!boss&&e.hp<e.maxHp){c.fillStyle='#071e24cc';c.fillRect(e.x-23,y+42,46,5);c.fillStyle=color;c.fillRect(e.x-23,y+42,46*e.hp/e.maxHp,5)}
-   if(boss&&alive&&Math.abs(this.player.x-e.x)<580)this.label(open?'OPEN · STRIKE NOW':windup?(e.hp<=4?'WIDE LIGHT FAN':'LIGHT FAN'):'GUARDED',e.x,y-94,open?'#d5f4bd':'#ffe8b4',12);
+   if(boss&&alive&&Math.abs(this.player.x-e.x)<1000)this.label(open?'OPEN · STRIKE NOW':windup?e.pattern?.toUpperCase()||'LIGHT FAN':'GUARDED',e.x,y-94,open?'#d5f4bd':'#ffe8b4',12);
   }
  }
  private drawMemories(t:number){
@@ -410,7 +522,14 @@ export class Game {
   c.restore();
  }
  private toast(message:string){this.state.message=message;this.messageUntil=this.elapsed+5.5;this.publish()}
- private publish(){this.state.controller=!!this.activePad;this.state.combo=this.comboWindow>0?this.combo:0;const boss=this.world[this.state.room].enemies.find(e=>e.kind==='keeper'&&e.hp>0);this.state.bossHealth=boss&&Math.abs(boss.x-this.player.x)<750?boss.hp:null;this.state.bossIntent=!boss?'':boss.mode==='recover'?'OPEN · STRIKE NOW':boss.mode==='windup'?(boss.hp<=4?'WIDE FAN · JUMP, DASH OR PARRY':'LIGHT FAN · JUMP, DASH OR PARRY'):'GUARDED · WAIT FOR ITS ATTACK';this.state.canTravel=this.started&&this.atSunwell()&&!this.state.won;this.onUpdate({...this.state,seeds:[...this.state.seeds],visited:[...this.state.visited],shrines:[...this.state.shrines],discoveries:[...this.state.discoveries]})}
+ private publish(){
+  this.state.controller=!!this.activePad;this.state.combo=this.comboWindow>0?this.combo:0;this.state.stage=areaStage(this.state.room);this.state.part=areaPart(this.state.room);this.state.enemiesLeft=this.world[this.state.room].enemies.filter(e=>e.hp>0).length;
+  const boss=this.world[this.state.room].enemies.find(e=>e.boss!==undefined&&e.hp>0);
+  this.state.bossHealth=boss&&Math.abs(boss.x-this.player.x)<1000?boss.hp:null;this.state.bossMaxHealth=boss?.maxHp||0;this.state.bossName=boss?stages[boss.boss!].boss:'';
+  this.state.bossIntent=!boss?'':boss.mode==='recover'?'OPEN · STRIKE NOW':boss.mode==='windup'?`${(boss.pattern||'').toUpperCase()} · PHASE ${bossPhase(boss.hp,boss.maxHp,boss.boss!)}`:'GUARDED · READ THE NEXT WARNING';
+  this.state.canTravel=this.started&&this.atSunwell()&&!this.state.won&&!this.bossActive();
+  this.onUpdate({...this.state,seeds:[...this.state.seeds],visited:[...this.state.visited],shrines:[...this.state.shrines],discoveries:[...this.state.discoveries],bosses:[...this.state.bosses],beacons:[...this.state.beacons]});
+ }
  private burst(x:number,y:number,n:number,color:string){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=30+Math.random()*190,l=.3+Math.random()*.65;this.particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:l,max:l,color,r:1+Math.random()*4})}}
  private tone(freq:number,duration:number,type:OscillatorType='sine',volume=.04,channel:'effects'|'music'='effects'){if(!this.audio||this.mute||this.audio.state!=='running')return;const o=this.audio.createOscillator(),g=this.audio.createGain(),t=this.audio.currentTime;o.type=type;o.frequency.setValueAtTime(freq,t);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(volume,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+duration);o.connect(g);g.connect((channel==='music'?this.musicBus:this.effectsBus)??this.audio.destination);o.start(t);o.stop(t+duration+.03)}
  private chime(){[523,659,784,1046].forEach((f,i)=>{setTimeout(()=>{if(!this.stopped)this.tone(f,.55,'sine',.05)},i*110)})}
@@ -418,7 +537,7 @@ export class Game {
  private label(text:string,x:number,y:number,color='#f8e8b8',size=15){const c=this.ctx;c.font=`${size}px Georgia`;c.textAlign='center';c.fillStyle='rgba(3,24,22,.72)';const w=c.measureText(text).width+24;c.beginPath();c.roundRect(x-w/2,y-17,w,28,5);c.fill();c.fillStyle=color;c.fillText(text,x,y+2)}
  private render(){
   const c=this.ctx;if(!this.scale)return;c.setTransform(this.scale,0,0,this.scale,0,0);c.clearRect(0,0,this.viewport,H);const r=this.world[this.state.room],p=this.player,t=this.elapsed;
-  const backdrop=this.backdrops[this.started?this.state.room:0];const art=backdrop?.naturalWidth?backdrop:this.bg;
+  const backdrop=this.backdrops[this.started?areaStage(this.state.room):0];const art=backdrop?.naturalWidth?backdrop:this.bg;
   if(art.complete&&art.naturalWidth){const ratio=art.naturalWidth/art.naturalHeight,baseWidth=Math.max(this.viewport+190,H*ratio),baseHeight=baseWidth/ratio;const offset=this.started?Math.min(180,this.camera*.075):70;c.drawImage(art,-offset,-Math.max(0,baseHeight-H)*.32,baseWidth,baseHeight)}else{c.fillStyle='#184e40';c.fillRect(0,0,this.viewport,H)}
   c.fillStyle=r.tint;c.fillRect(0,0,this.viewport,H);
   const shade=c.createLinearGradient(0,0,0,H);shade.addColorStop(0,'#06232144');shade.addColorStop(.5,'#06232100');shade.addColorStop(1,'#07292388');c.fillStyle=shade;c.fillRect(0,0,this.viewport,H);
@@ -426,12 +545,12 @@ export class Game {
   c.save();c.translate(-this.camera+(Math.random()-.5)*this.shake,(Math.random()-.5)*this.shake);
   for(const plat of r.platforms){if(plat.x+plat.w<this.camera-50||plat.x>this.camera+this.viewport+50)continue;c.save();c.beginPath();c.moveTo(plat.x,plat.y+6);c.lineTo(plat.x+10,plat.y);c.lineTo(plat.x+plat.w-9,plat.y);c.lineTo(plat.x+plat.w,plat.y+8);c.lineTo(plat.x+plat.w-6,plat.y+plat.h*.8);c.lineTo(plat.x+plat.w*.78,plat.y+plat.h);c.lineTo(plat.x+plat.w*.43,plat.y+plat.h*.87);c.lineTo(plat.x+12,plat.y+plat.h);c.closePath();c.clip();if(this.bg.naturalWidth)c.drawImage(this.bg,120,760,980,170,plat.x,plat.y,plat.w,plat.h);else{c.fillStyle='#314b34';c.fillRect(plat.x,plat.y,plat.w,plat.h)}const dark=c.createLinearGradient(0,plat.y,0,plat.y+plat.h);dark.addColorStop(0,'#273d1900');dark.addColorStop(1,'#031c21dd');c.fillStyle=dark;c.fillRect(plat.x,plat.y,plat.w,plat.h);c.fillStyle='#acbc6155';c.fillRect(plat.x,plat.y,plat.w,4);c.restore();}
   if(this.state.room===2&&!this.broken.has(2)){this.glow(612,580,105,'#ffac4933');c.fillStyle='#86682caf';c.fillRect(590,435,45,270);c.strokeStyle='#ffc177';c.lineWidth=3;for(let i=0;i<7;i++){c.beginPath();c.moveTo(580,455+i*36);c.lineTo(639,478+i*32);c.lineTo(594,495+i*29);c.stroke()}this.label('AMBER THORNS',612,411,'#ffd797',12);if(Math.abs(p.x-612)<160)this.label(this.state.controller?'B / RB · Sun Dash':keyLabel(this.preferences.bindings.dash)+' · Sun Dash',612,745)}
-  for(const door of r.doors){this.glow(door.x,door.y-55,70,door.needs&&!this.state[door.needs]?'#98b2d51a':'#dfecae25');c.save();c.strokeStyle='#e2d5a777';c.lineWidth=2;c.beginPath();c.ellipse(door.x,door.y-44,25,45,0,Math.PI,Math.PI*2);c.stroke();c.restore();const close=Math.abs(p.x-door.x)<105&&Math.abs(p.y-door.y)<100;this.label(close&&door.needs&&!this.state[door.needs]?'SKY FEATHER REQUIRED':close?(this.state.controller?'Y · ':keyLabel(this.preferences.bindings.interact)+' · ')+door.label:door.label,door.x,door.y-105,close?'#fff0b0':'#d6e4cf',close?15:13)}
-  if(r.shrine!==undefined){const x=r.shrine;this.glow(x,657,100,'#b3ffd23a');c.strokeStyle='#baeed3';c.lineWidth=3;c.beginPath();c.ellipse(x,672,22,9,0,0,Math.PI*2);c.stroke();c.beginPath();c.moveTo(x,660);c.lineTo(x-12,645);c.lineTo(x,625);c.lineTo(x+12,645);c.closePath();c.fillStyle='#cdf7cb';c.shadowBlur=20;c.shadowColor='#dcffb9';c.fill();c.shadowBlur=0;if(Math.abs(p.x-x)<105)this.label(this.state.room===0&&this.state.seeds.length===3?(this.state.controller?'Y':keyLabel(this.preferences.bindings.interact))+' · Restore the Sunwell':(this.state.controller?'Y':keyLabel(this.preferences.bindings.interact))+' · Rest & grow',x,598)}
+  for(const door of r.doors){this.glow(door.x,door.y-55,70,door.needs&&!this.state[door.needs]?'#98b2d51a':'#dfecae25');c.save();c.strokeStyle='#e2d5a777';c.lineWidth=2;c.beginPath();c.ellipse(door.x,door.y-44,25,45,0,Math.PI,Math.PI*2);c.stroke();c.restore();const close=Math.abs(p.x-door.x)<105&&Math.abs(p.y-door.y)<100;this.label(close&&this.doorBlocked(door)?'PASSAGE SEALED · SEE OBJECTIVE':close?(this.state.controller?'Y · ':keyLabel(this.preferences.bindings.interact)+' · ')+door.label:door.label,door.x,door.y-105,close?'#fff0b0':'#d6e4cf',close?15:13)}
+  if(r.shrine!==undefined){const x=r.shrine;this.glow(x,657,100,'#b3ffd23a');c.strokeStyle='#baeed3';c.lineWidth=3;c.beginPath();c.ellipse(x,672,22,9,0,0,Math.PI*2);c.stroke();c.beginPath();c.moveTo(x,660);c.lineTo(x-12,645);c.lineTo(x,625);c.lineTo(x+12,645);c.closePath();c.fillStyle='#cdf7cb';c.shadowBlur=20;c.shadowColor='#dcffb9';c.fill();c.shadowBlur=0;if(Math.abs(p.x-x)<105)this.label(this.state.bosses.length===6?(this.state.controller?'Y':keyLabel(this.preferences.bindings.interact))+' · Restore the Sunwell':(this.state.controller?'Y':keyLabel(this.preferences.bindings.interact))+' · Rest & grow',x,598)}
   for(const m of r.motes){if(this.collected.has(m.id))continue;const y=m.y+Math.sin(t*2+m.x)*5;this.glow(m.x,y,20,'#ffe68844');c.fillStyle='#ffe9a8';c.save();c.translate(m.x,y);c.rotate(Math.PI/4);c.fillRect(-3.5,-3.5,7,7);c.restore()}
   if(r.ability&&!this.state[r.ability.type]){const a=r.ability,y=a.y+Math.sin(t*2)*7;this.glow(a.x,y,80,'#fff1b14f');c.save();c.translate(a.x,y);c.rotate(t*.25);c.strokeStyle='#ffecc0';c.lineWidth=2;c.strokeRect(-20,-20,40,40);c.restore();c.fillStyle='#fff3ca';c.font='32px Georgia';c.textAlign='center';c.fillText(a.type==='dash'?'ϟ':'✧',a.x,y+11);this.label(a.type==='dash'?'SUN DASH':'SKY FEATHER',a.x,y-48,'#ffedb5',13)}
   if(r.seed&&!this.state.seeds.includes(this.state.room)){const {x,y}=r.seed;this.glow(x,y,100,'#ffcf6455');c.save();c.translate(x,y+Math.sin(t*2)*6);c.rotate(Math.sin(t)*.15);c.beginPath();c.moveTo(0,-23);c.bezierCurveTo(31,2,18,23,0,23);c.bezierCurveTo(-18,23,-31,2,0,-23);const g=c.createLinearGradient(-15,-20,15,22);g.addColorStop(0,'#fff2b6');g.addColorStop(1,'#ecab4d');c.fillStyle=g;c.shadowColor='#ffd56c';c.shadowBlur=22;c.fill();c.restore();if(!this.seedGuarded(r))this.label('SUNSEED',x,y-48,'#ffdf8d',12)}
-  this.drawMemories(t);this.drawEnemies(t);
+  this.drawChallenges(t);this.drawMemories(t);this.drawEnemies(t);
   c.fillStyle='#031c2166';c.beginPath();c.ellipse(p.x,p.y+3,33,8,0,0,Math.PI*2);c.fill();this.glow(p.x,p.y-35,70,'#ffebb21a');
   this.drawGuardian(t);
   if(this.attack>0){c.save();c.translate(p.x,p.y-40);c.scale(p.face,1);c.strokeStyle='#fff2c6';c.shadowColor='#ffdd86';c.shadowBlur=22;c.lineWidth=this.combo===3?11:7;c.beginPath();const phase=(.23-this.attack)/.23;c.arc(20,0,83,-1.2+phase*.3,1.2+phase*.3);c.stroke();c.restore()}
