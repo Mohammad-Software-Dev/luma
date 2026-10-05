@@ -1,5 +1,5 @@
 /** Luma's deterministic, fixed-step TypeScript game engine. No remote services. */
-export interface Snapshot {room:number;roomName:string;health:number;light:number;seeds:number[];dash:boolean;doubleJump:boolean;visited:number[];time:number;won:boolean;message:string;controller:boolean;dashCharge:number;bossHealth:number|null;bossMaxHealth:number;animation:string}
+export interface Snapshot {room:number;roomName:string;health:number;light:number;seeds:number[];dash:boolean;doubleJump:boolean;visited:number[];shrines:number[];canTravel:boolean;time:number;won:boolean;message:string;controller:boolean;dashCharge:number;bossHealth:number|null;bossMaxHealth:number;animation:string}
 type Platform={x:number;y:number;w:number;h:number};
 type Door={x:number;y:number;to:number;label:string;needs?:'doubleJump'|'dash'};
 type Mote={x:number;y:number;id:string};
@@ -35,9 +35,29 @@ function rooms():Room[]{
  ];
  r.forEach((room,ri)=>{room.enemies.forEach((e,ei)=>e.id=`${ri}-${ei}`);room.platforms.forEach((p,pi)=>{if(p.y<700){for(let i=0;i<3;i++)room.motes.push({x:p.x+45+i*(p.w-90)/2,y:p.y-38,id:`${ri}-${pi}-${i}`})}});for(let i=0;i<7;i++)room.motes.push({x:430+i*270,y:653,id:`${ri}-g-${i}`})});return r;
 }
+
+/** Map metadata comes from the same passages used by the physics engine. */
+export const worldRegions=rooms().map((r,id)=>({id,name:r.name.replace(/^The /,''),doors:r.doors,hasSeed:!!r.seed}));
+export function journeyRoute(state:Pick<Snapshot,'room'|'dash'|'doubleJump'>,target:number):number[]{
+ const queue=[[state.room]],seen=new Set([state.room]);
+ while(queue.length){const path=queue.shift()!,room=path[path.length-1];if(room===target)return path;
+  for(const door of worldRegions[room].doors){if(!seen.has(door.to)&&(!door.needs||state[door.needs])){seen.add(door.to);queue.push([...path,door.to])}}
+ }return [];
+}
+export function journeyObjective(state:Pick<Snapshot,'room'|'dash'|'doubleJump'|'seeds'|'won'>){
+ if(state.won)return {title:'The forest is singing again.',detail:'Every little light made a difference.',target:0,route:[] as number[]};
+ let target=0,title='Bring the sunseeds home.',detail='Rest at the Waking Glade Sunwell to restore the forest.';
+ if(!state.dash){target=1;title='Awaken Sun Dash.';detail='Find the golden light beyond the falls, near the eastern passage.'}
+ else if(!state.doubleJump){target=2;title='Find the Sky Feather.';detail='Dash through the amber thorns, then jump onto the first high ledge.'}
+ else if(state.seeds.length<3){const remaining=[2,4,5].filter(n=>!state.seeds.includes(n));target=remaining.sort((a,b)=>(journeyRoute(state,a).length||99)-(journeyRoute(state,b).length||99))[0];title=`Recover the ${worldRegions[target].name} sunseed.`;detail=target===2?'Double jump to the high amber ledge.':target===4?'Climb the moonlit terraces and free the seed from its sentry.':'Climb the ruins and strike the Keeper while it rests.'}
+ const route=journeyRoute(state,target);
+ if(state.room!==target&&route.length>1)detail=`Take the passage to ${worldRegions[route[1]].name}. ${detail}`;
+ return {title,detail,target,route};
+}
+
 export class Game {
- ready:Promise<void>;state:Snapshot={room:0,roomName:'The Waking Glade',health:5,light:0,seeds:[],dash:false,doubleJump:false,visited:[0],time:0,won:false,message:'',controller:false,dashCharge:1,bossHealth:null,bossMaxHealth:8,animation:'idle'};
- private backdrops:HTMLImageElement[]=[];private runSheet=new Image();private padKeys=new Set<string>();private padPressed=new Set<string>();private padMenus=new Set<MenuAction>();private activePad:Gamepad|null=null;private gamepadActive=false;private projectiles:Projectile[]=[];private defeated=new Set<string>();private swingHits=new Set<string>();private combo=0;private comboWindow=0;private hitStop=0;private knockback=0;private landing=0;private runCycle=0;private stepDistance=0;private lastFacing=1;private reducedMotion=false;private backdropLoads=new Map<number,Promise<void>>();
+ ready:Promise<void>;state:Snapshot={room:0,roomName:'The Waking Glade',health:5,light:0,seeds:[],dash:false,doubleJump:false,visited:[0],shrines:[0],canTravel:false,time:0,won:false,message:'',controller:false,dashCharge:1,bossHealth:null,bossMaxHealth:8,animation:'idle'};
+ private respawns=0;private backdrops:HTMLImageElement[]=[];private runSheet=new Image();private padKeys=new Set<string>();private padPressed=new Set<string>();private padMenus=new Set<MenuAction>();private activePad:Gamepad|null=null;private gamepadActive=false;private projectiles:Projectile[]=[];private defeated=new Set<string>();private swingHits=new Set<string>();private combo=0;private comboWindow=0;private hitStop=0;private knockback=0;private landing=0;private runCycle=0;private stepDistance=0;private lastFacing=1;private reducedMotion=false;private backdropLoads=new Map<number,Promise<void>>();
  private ctx:CanvasRenderingContext2D;private bg=new Image();private sprite=new Image();private world=rooms();private keys=new Set<string>();private pressed=new Set<string>();private collected=new Set<string>();private broken=new Set<number>();private particles:Particle[]=[];private paused=true;private started=false;private stopped=false;private raf=0;private last=0;private accumulator=0;private elapsed=0;private messageUntil=0;private camera=0;private viewport=1440;private scale=1;private checkpoint={room:0,x:230,y:705};private saveAvailable=true;private mute=false;private audio:AudioContext|null=null;private music=0;private nextNote=0;private invincible=0;private shake=0;private attack=0;private attackCooldown=0;private dashTime=0;private dashCooldown=0;private coyote=0;private jumpBuffer=0;private usedDouble=false;private transition=0;private lastPublish=0;private safe={x:230,y:705};private player={x:230,y:705,vx:0,vy:0,face:1,grounded:true};private resize:ResizeObserver;private lifecycle=new AbortController();private ambient:Array<{x:number;y:number;s:number;phase:number}>=[];
  constructor(private canvas:HTMLCanvasElement,private onUpdate:(s:Snapshot)=>void,private onMenu:(action:MenuAction)=>void=()=>{}){
   this.ctx=canvas.getContext('2d',{alpha:false})!;
@@ -69,15 +89,25 @@ export class Game {
  setPaused(value:boolean){this.paused=value;this.clearInput();if(value)this.audio?.suspend().catch(()=>{});else if(!this.mute)this.audio?.resume().catch(()=>{})}
  setMuted(value:boolean){this.mute=value;if(value)this.audio?.suspend().catch(()=>{});else if(!this.paused)this.audio?.resume().catch(()=>{})}
  hasSave(){try{return !!this.readSave()}catch{return false}}
- private readSave(){try{const raw=localStorage.getItem(SAVE_KEY);if(!raw)return null;const s=JSON.parse(raw);if(s.version!==1||!Number.isInteger(s.room)||s.room<0||s.room>5||!Array.isArray(s.seeds)||!s.seeds.every((x:unknown)=>typeof x==='number'&&[2,4,5].includes(x))||!Array.isArray(s.collected)||!Array.isArray(s.visited))return null;return s}catch{return null}}
+ private readSave(){try{
+  const raw=localStorage.getItem(SAVE_KEY);if(!raw)return null;const s=JSON.parse(raw);
+  if(!s||s.version!==1||!Number.isInteger(s.room)||s.room<0||s.room>5||!Array.isArray(s.seeds)||!s.seeds.every((x:unknown)=>typeof x==='number'&&[2,4,5].includes(x))||!Array.isArray(s.collected)||!Array.isArray(s.visited))return null;
+  const checkpointRoom=s.checkpoint?.room;
+  // Checkpoints are Sunwells, never arbitrary positions from corrupt saves.
+  const room=Number.isInteger(checkpointRoom)&&checkpointRoom>=0&&checkpointRoom<6?checkpointRoom:0;
+  s.checkpoint={room,x:this.world[room].shrine!,y:705};
+  s.shrines=[...new Set([0,room,...(Array.isArray(s.shrines)?s.shrines.filter((n:unknown)=>typeof n==='number'&&Number.isInteger(n)&&n>=0&&n<6):[])])];
+  return s;
+ }catch{return null}}
+
  start(resume=false){
-  this.world=rooms();this.collected.clear();this.broken.clear();this.defeated.clear();this.particles=[];this.projectiles=[];this.swingHits.clear();this.combo=0;this.comboWindow=0;this.hitStop=0;this.landing=0;this.knockback=0;this.runCycle=0;this.stepDistance=0;this.lastPublish=0;this.state={room:0,roomName:'The Waking Glade',health:5,light:0,seeds:[],dash:false,doubleJump:false,visited:[0],time:0,won:false,message:'',controller:false,dashCharge:1,bossHealth:null,bossMaxHealth:8,animation:'idle'};this.checkpoint={room:0,x:230,y:705};
-  const s=resume?this.readSave():null;if(s){this.state={...this.state,room:s.room,seeds:[...new Set<number>(s.seeds)],dash:!!s.dash,doubleJump:!!s.doubleJump,light:Number.isFinite(s.light)?Math.max(0,s.light):0,visited:s.visited.filter((n:number)=>Number.isInteger(n)&&n>=0&&n<6),time:Number.isFinite(s.time)?s.time:0};this.collected=new Set(s.collected.filter((n:unknown)=>typeof n==='string'));this.broken=new Set(Array.isArray(s.broken)?s.broken.filter((n:unknown)=>n===2):[]);this.defeated=new Set(Array.isArray(s.defeated)?s.defeated.filter((n:unknown)=>typeof n==='string'):[]);for(const room of this.world)for(const e of room.enemies)if(this.defeated.has(e.id))e.hp=0;if(s.checkpoint&&Number.isInteger(s.checkpoint.room)&&s.checkpoint.room>=0&&s.checkpoint.room<6&&Number.isFinite(s.checkpoint.x))this.checkpoint=s.checkpoint;}
-  this.player={x:s?this.checkpoint.x:230,y:705,vx:0,vy:0,face:1,grounded:true};this.state.room=s?this.checkpoint.room:0;this.state.roomName=this.world[this.state.room].name;this.safe={x:this.player.x,y:705};this.camera=Math.max(0,this.player.x-this.viewport*.35);this.invincible=0;this.attack=0;this.attackCooldown=0;this.dashTime=0;this.dashCooldown=0;this.transition=0;this.coyote=.1;this.jumpBuffer=0;this.usedDouble=false;this.started=true;this.paused=false;
+  this.world=rooms();this.collected.clear();this.broken.clear();this.defeated.clear();this.particles=[];this.projectiles=[];this.swingHits.clear();this.combo=0;this.comboWindow=0;this.hitStop=0;this.landing=0;this.knockback=0;this.runCycle=0;this.stepDistance=0;this.lastPublish=0;this.state={room:0,roomName:'The Waking Glade',health:5,light:0,seeds:[],dash:false,doubleJump:false,visited:[0],shrines:[0],canTravel:false,time:0,won:false,message:'',controller:false,dashCharge:1,bossHealth:null,bossMaxHealth:8,animation:'idle'};this.checkpoint={room:0,x:230,y:705};
+  const s=resume?this.readSave():null;if(s){this.state={...this.state,room:s.room,seeds:[...new Set<number>(s.seeds)],dash:!!s.dash,doubleJump:!!s.doubleJump,light:Number.isFinite(s.light)?Math.max(0,s.light):0,visited:s.visited.filter((n:number)=>Number.isInteger(n)&&n>=0&&n<6),shrines:s.shrines,won:!!s.won&&new Set(s.seeds).size===3,time:Number.isFinite(s.time)?Math.max(0,s.time):0};this.collected=new Set(s.collected.filter((n:unknown)=>typeof n==='string'));this.broken=new Set(Array.isArray(s.broken)?s.broken.filter((n:unknown)=>n===2):[]);this.defeated=new Set(Array.isArray(s.defeated)?s.defeated.filter((n:unknown)=>typeof n==='string'):[]);for(const room of this.world)for(const e of room.enemies)if(this.defeated.has(e.id))e.hp=0;if(s.checkpoint&&Number.isInteger(s.checkpoint.room)&&s.checkpoint.room>=0&&s.checkpoint.room<6&&Number.isFinite(s.checkpoint.x))this.checkpoint=s.checkpoint;}
+  this.player={x:s?this.checkpoint.x:230,y:705,vx:0,vy:0,face:1,grounded:true};this.state.room=s?this.checkpoint.room:0;this.state.roomName=this.world[this.state.room].name;if(!this.state.visited.includes(this.state.room))this.state.visited.push(this.state.room);this.safe={x:this.player.x,y:705};this.camera=Math.max(0,this.player.x-this.viewport*.35);this.invincible=0;this.attack=0;this.attackCooldown=0;this.dashTime=0;this.dashCooldown=0;this.transition=0;this.coyote=.1;this.jumpBuffer=0;this.usedDouble=false;this.started=true;this.paused=false;
   try{if(!this.audio||this.audio.state==='closed')this.audio=new AudioContext();if(!this.mute)this.audio.resume().catch(()=>{})}catch{}
   this.toast(s?'Welcome back, little light.':'Follow the fireflies. Your adventure begins to the east.');this.save();this.publish();
  }
- save(){if(!this.started)return;try{localStorage.setItem(SAVE_KEY,JSON.stringify({version:1,room:this.state.room,checkpoint:this.checkpoint,seeds:this.state.seeds,dash:this.state.dash,doubleJump:this.state.doubleJump,light:this.state.light,visited:this.state.visited,time:this.state.time,collected:[...this.collected],broken:[...this.broken],defeated:[...this.defeated]}))}catch{this.saveAvailable=false}}
+ save(){if(!this.started)return;try{localStorage.setItem(SAVE_KEY,JSON.stringify({version:1,room:this.state.room,checkpoint:this.checkpoint,seeds:this.state.seeds,dash:this.state.dash,doubleJump:this.state.doubleJump,light:this.state.light,visited:this.state.visited,shrines:this.state.shrines,won:this.state.won,time:this.state.time,collected:[...this.collected],broken:[...this.broken],defeated:[...this.defeated]}))}catch{this.saveAvailable=false}}
  destroy(){this.stopped=true;cancelAnimationFrame(this.raf);this.resize.disconnect();this.lifecycle.abort();window.removeEventListener('keydown',this.keydown);window.removeEventListener('keyup',this.keyup);window.removeEventListener('blur',this.blur);document.removeEventListener('visibilitychange',this.visibility);this.save();this.audio?.close().catch(()=>{})}
  private frame=(now:number)=>{if(this.stopped)return;this.pollGamepad();const dt=Math.min((now-(this.last||now))/1000,.05);this.last=now;this.elapsed+=dt;if(!this.paused&&!document.hidden&&!this.state.won){this.accumulator+=dt;while(this.accumulator>=1/120){this.update(1/120);this.accumulator-=1/120}}this.render();this.raf=requestAnimationFrame(this.frame)};
  private held(...keys:string[]){return keys.some(k=>this.keys.has(k)||this.padKeys.has(k))}
@@ -109,14 +139,14 @@ export class Game {
   if(this.state.room===2&&!this.broken.has(2)&&p.x+18>590&&p.x-18<635&&p.y>430){if(this.dashTime>0){this.broken.add(2);this.burst(612,580,55,'#ffc478');this.shake=8;this.toast('A new path opens. Keep growing, little light.');this.save()}else{p.x=oldX<610?571:654;p.vx=0;if(this.tap('KeyE','ArrowDown'))this.toast('Amber thorns yield to Sun Dash. Press Shift.')}}
   p.x=Math.max(25,Math.min(W-25,p.x));
   if(p.y>H+130){this.hurt(true);this.pressed.clear();return}
-  this.updateEnemies(dt);this.updateProjectiles(dt);
+  const respawns=this.respawns;this.updateEnemies(dt);if(this.respawns!==respawns){this.clearInput();return}this.updateProjectiles(dt);if(this.respawns!==respawns){this.clearInput();return}
   for(const m of r.motes){if(!this.collected.has(m.id)&&Math.hypot(m.x-p.x,m.y-(p.y-35))<44){this.collected.add(m.id);this.state.light++;this.burst(m.x,m.y,8,'#fff0a3');this.tone(750+(this.state.light%5)*90,.09,'sine',.027);this.publish()}}
   if(r.ability&&!this.state[r.ability.type]&&Math.hypot(r.ability.x-p.x,r.ability.y-(p.y-35))<72){this.state[r.ability.type]=true;this.burst(r.ability.x,r.ability.y,65,'#f8e3a8');this.toast(r.ability.type==='dash'?'Sun Dash awakened! Press Shift to burst through amber thorns.':'Sky Feather awakened! Press jump again in the air.');this.chime();this.save();this.publish()}
   if(r.seed&&!this.state.seeds.includes(this.state.room)&&Math.hypot(r.seed.x-p.x,r.seed.y-(p.y-35))<65){const guardian=r.enemies.some(e=>e.hp>0&&Math.hypot(e.home-r.seed!.x,e.y-r.seed!.y)<220);if(!guardian){this.state.seeds.push(this.state.room);this.burst(r.seed.x,r.seed.y,90,'#ffdd78');this.toast(`Sunseed ${this.state.seeds.length} of 3 found. The forest feels a little brighter.`);this.chime();this.save();this.publish()}else if(this.tap('KeyE','ArrowDown'))this.toast('Free the sunseed from the shadow wisp. Press J to strike.')}
   if(this.tap('KeyE','ArrowDown')){
    let used=false;
-   if(r.shrine!==undefined&&Math.abs(r.shrine-p.x)<100&&Math.abs(p.y-705)<90){used=true;this.state.health=5;this.checkpoint={room:this.state.room,x:r.shrine,y:705};this.burst(p.x,p.y-30,35,'#acffce');if(this.state.room===0&&this.state.seeds.length===3){this.state.won=true;this.chime();this.toast('The Sunwell is awake. Thank you, little guardian.')}else this.toast(this.saveAvailable?'Hearts restored. Your journey is saved.':'Hearts restored. Browser storage is unavailable.');this.save();this.publish()}
-   if(!used){for(const door of r.doors){if(Math.abs(door.x-p.x)<105&&Math.abs(p.y-door.y)<100){used=true;if(door.needs&&!this.state[door.needs])this.toast('A Sky Feather will carry you to this hidden path.');else this.enter(door.to);break}}
+   if(r.shrine!==undefined&&Math.abs(r.shrine-p.x)<100&&Math.abs(p.y-705)<90){used=true;const newlyLit=!this.state.shrines.includes(this.state.room);if(newlyLit)this.state.shrines.push(this.state.room);this.state.health=5;this.checkpoint={room:this.state.room,x:r.shrine,y:705};this.burst(p.x,p.y-30,35,'#acffce');if(this.state.room===0&&this.state.seeds.length===3){this.state.won=true;this.chime();this.toast('The Sunwell is awake. Thank you, little guardian.')}else this.toast(!this.saveAvailable?'Hearts restored. Browser storage is unavailable.':newlyLit?'Sunwell lit! Open the map here to travel between lit Sunwells.':'Hearts restored and saved. Open the map here to travel.');this.save();this.publish()}
+   if(!used){for(const door of r.doors){if(Math.abs(door.x-p.x)<105&&Math.abs(p.y-door.y)<100){used=true;if(door.needs&&!this.state[door.needs])this.toast('A Sky Feather will carry you to this hidden path.');else{this.enter(door.to);return}break}}
    }
    if(!used&&this.state.room===0&&this.state.seeds.length<3&&p.x<350)this.toast('Bring three sunseeds to the Sunwell to awaken the forest.');
   }
@@ -130,8 +160,30 @@ export class Game {
   if(this.state.time-this.lastPublish>.1){this.lastPublish=this.state.time;this.publish()}
   this.pressed.clear();this.padPressed.clear();
  }
- private enter(to:number){this.projectiles=[];this.swingHits.clear();this.attack=0;this.dashTime=0;this.usedDouble=false;this.hitStop=0;void this.loadBackdrop(to);const previous=this.state.room,r=this.world[to],back=r.doors.find(d=>d.to===previous);this.state.room=to;this.state.roomName=r.name;if(!this.state.visited.includes(to))this.state.visited.push(to);this.player={x:back?back.x+(back.x<300?105:back.x>2100?-105:0):300,y:back?back.y:705,vx:0,vy:0,face:back&&back.x>2100?-1:1,grounded:true};this.safe={x:r.shrine??310,y:705};this.invincible=1;this.camera=Math.max(0,Math.min(W-this.viewport,this.player.x-this.viewport*.4));this.transition=.6;this.checkpoint={room:to,x:r.shrine??(back&&back.x>2100?2100:300),y:705};this.save();this.publish();this.tone(330,.4,'sine',.03)}
- private hurt(fall:boolean){if(this.invincible>0&&!fall)return;this.state.health--;this.invincible=1.6;this.shake=this.reducedMotion?0:6;this.rumble(.35,120);this.burst(this.player.x,this.player.y-25,22,'#ffb991');this.tone(130,.18,'triangle',.06);if(this.state.health<=0){this.state.health=5;this.state.room=this.checkpoint.room;this.state.roomName=this.world[this.state.room].name;this.player.x=this.checkpoint.x;this.player.y=705;this.player.vx=0;this.player.vy=0;this.safe={x:this.checkpoint.x,y:705};this.projectiles=[];this.toast('A little rest, a little courage. Your light is safe.')}else if(fall){this.player.x=this.safe.x;this.player.y=this.safe.y;this.toast('The forest caught you. Try another leap.')}else{this.knockback=.16;this.player.vx=-this.player.face*240;this.player.vy=-220}this.player.vy=fall?0:this.player.vy;this.dashTime=0;this.publish()}
+ private settlePlayer(x:number,y=705,face=1){
+  this.clearInput();this.projectiles=[];this.swingHits.clear();this.attack=0;this.attackCooldown=0;this.combo=0;this.comboWindow=0;this.dashTime=0;this.dashCooldown=0;this.usedDouble=false;this.hitStop=0;this.knockback=0;this.jumpBuffer=0;this.coyote=.12;this.landing=0;
+  this.player={x,y,vx:0,vy:0,face,grounded:true};this.safe={x,y};this.invincible=1.6;this.state.bossHealth=null;this.state.animation='idle';this.state.dashCharge=1;this.camera=Math.max(0,Math.min(W-this.viewport,x-this.viewport*.4));this.transition=.6;void this.loadBackdrop(this.state.room);
+ }
+ private enter(to:number){
+  const previous=this.state.room,r=this.world[to],back=r.doors.find(d=>d.to===previous);
+  this.state.room=to;this.state.roomName=r.name;if(!this.state.visited.includes(to))this.state.visited.push(to);
+  this.settlePlayer(back?back.x+(back.x<300?105:back.x>2100?-105:0):300,back?back.y:705,back&&back.x>2100?-1:1);
+  // Merely entering an area must not activate a Sunwell or move the checkpoint past a gate.
+  this.save();this.publish();this.tone(330,.4,'sine',.03);
+ }
+ private atSunwell(){const shrine=this.world[this.state.room].shrine;return shrine!==undefined&&this.state.shrines.includes(this.state.room)&&Math.abs(this.player.x-shrine)<100&&Math.abs(this.player.y-705)<20&&this.player.grounded}
+ travelTo(to:number){
+  if(!this.started||!this.paused||this.state.won||!Number.isInteger(to)||to<0||to>=this.world.length||to===this.state.room||!this.state.shrines.includes(to)||!this.atSunwell())return false;
+  this.state.room=to;this.state.roomName=this.world[to].name;this.state.health=5;const x=this.world[to].shrine!;
+  if(!this.state.visited.includes(to))this.state.visited.push(to);this.checkpoint={room:to,x,y:705};this.settlePlayer(x);this.save();this.chime();this.toast(`The light carries you to ${worldRegions[to].name}.`);this.publish();return true;
+ }
+ private hurt(fall:boolean){
+  if(this.invincible>0&&!fall)return;this.state.health--;this.invincible=1.6;this.shake=this.reducedMotion?0:6;this.rumble(.35,120);this.burst(this.player.x,this.player.y-25,22,'#ffb991');this.tone(130,.18,'triangle',.06);
+  if(this.state.health<=0){this.respawns++;this.state.health=5;this.state.room=this.checkpoint.room;this.state.roomName=this.world[this.state.room].name;this.settlePlayer(this.checkpoint.x);this.toast('A little rest, a little courage. Your light is safe.');this.save()}
+  else if(fall){this.player.x=this.safe.x;this.player.y=this.safe.y;this.player.vx=0;this.player.vy=0;this.toast('The forest caught you. Try another leap.')}
+  else{this.knockback=.16;this.player.vx=-this.player.face*240;this.player.vy=-220}
+  this.dashTime=0;this.publish();
+ }
  private pollGamepad(){
   let pad:Gamepad|null=null;
   try{if(typeof navigator!=='undefined'&&navigator.getGamepads)pad=Array.from(navigator.getGamepads()).find(p=>p?.connected&&p.mapping==='standard')??null}catch{}
@@ -172,16 +224,16 @@ export class Game {
     if(e.timer<=0){e.mode='recover';e.timer=1.3;}
    }else if(e.mode==='recover'&&e.timer<=0){e.mode='patrol';e.timer=.45;}
    const ey=e.y+Math.sin(e.phase*3)*9;
-   if(Math.abs(e.x-p.x)<(e.kind==='keeper'?49:39)&&Math.abs(ey-(p.y-35))<48&&this.dashTime<=0)this.hurt(false);
+   if(Math.abs(e.x-p.x)<(e.kind==='keeper'?49:39)&&Math.abs(ey-(p.y-35))<48&&this.dashTime<=0){const respawns=this.respawns;this.hurt(false);if(this.respawns!==respawns)return;}
   }
  }
  private updateProjectiles(dt:number){
-  const p=this.player;
-  this.projectiles=this.projectiles.filter(q=>{q.x+=q.vx*dt;q.y+=q.vy*dt;q.life-=dt;
-   if(this.dashTime>0&&Math.hypot(q.x-p.x,q.y-(p.y-35))<50){this.burst(q.x,q.y,8,'#ffe2a0');return false}
-   if(Math.hypot(q.x-p.x,q.y-(p.y-35))<q.radius+24){this.hurt(false);return false}
-   return q.life>0&&q.x>0&&q.x<W&&q.y>-30&&q.y<H+30;
-  });
+  const p=this.player,remaining:Projectile[]=[];
+  for(const q of this.projectiles){q.x+=q.vx*dt;q.y+=q.vy*dt;q.life-=dt;
+   if(this.dashTime>0&&Math.hypot(q.x-p.x,q.y-(p.y-35))<50){this.burst(q.x,q.y,8,'#ffe2a0');continue}
+   if(Math.hypot(q.x-p.x,q.y-(p.y-35))<q.radius+24){const respawns=this.respawns;this.hurt(false);if(this.respawns!==respawns)return;continue}
+   if(q.life>0&&q.x>0&&q.x<W&&q.y>-30&&q.y<H+30)remaining.push(q);
+  }this.projectiles=remaining;
  }
  private drawEnemies(t:number){
   const c=this.ctx;
@@ -221,7 +273,7 @@ export class Game {
   c.restore();
  }
  private toast(message:string){this.state.message=message;this.messageUntil=this.elapsed+5.5;this.publish()}
- private publish(){this.state.controller=!!this.activePad;this.onUpdate({...this.state,seeds:[...this.state.seeds],visited:[...this.state.visited]})}
+ private publish(){this.state.controller=!!this.activePad;this.state.canTravel=this.started&&this.atSunwell()&&!this.state.won;this.onUpdate({...this.state,seeds:[...this.state.seeds],visited:[...this.state.visited],shrines:[...this.state.shrines]})}
  private burst(x:number,y:number,n:number,color:string){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=30+Math.random()*190,l=.3+Math.random()*.65;this.particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:l,max:l,color,r:1+Math.random()*4})}}
  private tone(freq:number,duration:number,type:OscillatorType='sine',volume=.04){if(!this.audio||this.mute||this.audio.state!=='running')return;const o=this.audio.createOscillator(),g=this.audio.createGain(),t=this.audio.currentTime;o.type=type;o.frequency.setValueAtTime(freq,t);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(volume,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+duration);o.connect(g);g.connect(this.audio.destination);o.start(t);o.stop(t+duration+.03)}
  private chime(){[523,659,784,1046].forEach((f,i)=>{setTimeout(()=>{if(!this.stopped)this.tone(f,.55,'sine',.05)},i*110)})}
@@ -237,7 +289,7 @@ export class Game {
   c.save();c.translate(-this.camera+(Math.random()-.5)*this.shake,(Math.random()-.5)*this.shake);
   for(const plat of r.platforms){if(plat.x+plat.w<this.camera-50||plat.x>this.camera+this.viewport+50)continue;c.save();c.beginPath();c.moveTo(plat.x,plat.y+6);c.lineTo(plat.x+10,plat.y);c.lineTo(plat.x+plat.w-9,plat.y);c.lineTo(plat.x+plat.w,plat.y+8);c.lineTo(plat.x+plat.w-6,plat.y+plat.h*.8);c.lineTo(plat.x+plat.w*.78,plat.y+plat.h);c.lineTo(plat.x+plat.w*.43,plat.y+plat.h*.87);c.lineTo(plat.x+12,plat.y+plat.h);c.closePath();c.clip();if(this.bg.naturalWidth)c.drawImage(this.bg,120,760,980,170,plat.x,plat.y,plat.w,plat.h);else{c.fillStyle='#314b34';c.fillRect(plat.x,plat.y,plat.w,plat.h)}const dark=c.createLinearGradient(0,plat.y,0,plat.y+plat.h);dark.addColorStop(0,'#273d1900');dark.addColorStop(1,'#031c21dd');c.fillStyle=dark;c.fillRect(plat.x,plat.y,plat.w,plat.h);c.fillStyle='#acbc6155';c.fillRect(plat.x,plat.y,plat.w,4);c.restore();}
   if(this.state.room===2&&!this.broken.has(2)){this.glow(612,580,105,'#ffac4933');c.fillStyle='#86682caf';c.fillRect(590,435,45,270);c.strokeStyle='#ffc177';c.lineWidth=3;for(let i=0;i<7;i++){c.beginPath();c.moveTo(580,455+i*36);c.lineTo(639,478+i*32);c.lineTo(594,495+i*29);c.stroke()}this.label('AMBER THORNS',612,411,'#ffd797',12);if(Math.abs(p.x-612)<160)this.label(this.state.controller?'B / RB · Sun Dash':'SHIFT · Sun Dash',612,745)}
-  for(const door of r.doors){this.glow(door.x,door.y-55,70,door.needs&&!this.state[door.needs]?'#98b2d51a':'#dfecae25');c.save();c.strokeStyle='#e2d5a777';c.lineWidth=2;c.beginPath();c.ellipse(door.x,door.y-44,25,45,0,Math.PI,Math.PI*2);c.stroke();c.restore();const close=Math.abs(p.x-door.x)<105&&Math.abs(p.y-door.y)<100;this.label(close?(this.state.controller?'Y · ':'E · ')+door.label:door.label,door.x,door.y-105,close?'#fff0b0':'#d6e4cf',close?15:13)}
+  for(const door of r.doors){this.glow(door.x,door.y-55,70,door.needs&&!this.state[door.needs]?'#98b2d51a':'#dfecae25');c.save();c.strokeStyle='#e2d5a777';c.lineWidth=2;c.beginPath();c.ellipse(door.x,door.y-44,25,45,0,Math.PI,Math.PI*2);c.stroke();c.restore();const close=Math.abs(p.x-door.x)<105&&Math.abs(p.y-door.y)<100;this.label(close&&door.needs&&!this.state[door.needs]?'SKY FEATHER REQUIRED':close?(this.state.controller?'Y · ':'E · ')+door.label:door.label,door.x,door.y-105,close?'#fff0b0':'#d6e4cf',close?15:13)}
   if(r.shrine!==undefined){const x=r.shrine;this.glow(x,657,100,'#b3ffd23a');c.strokeStyle='#baeed3';c.lineWidth=3;c.beginPath();c.ellipse(x,672,22,9,0,0,Math.PI*2);c.stroke();c.beginPath();c.moveTo(x,660);c.lineTo(x-12,645);c.lineTo(x,625);c.lineTo(x+12,645);c.closePath();c.fillStyle='#cdf7cb';c.shadowBlur=20;c.shadowColor='#dcffb9';c.fill();c.shadowBlur=0;if(Math.abs(p.x-x)<105)this.label(this.state.room===0&&this.state.seeds.length===3?(this.state.controller?'Y':'E')+' · Restore the Sunwell':(this.state.controller?'Y':'E')+' · Rest at the Sunwell',x,598)}
   for(const m of r.motes){if(this.collected.has(m.id))continue;const y=m.y+Math.sin(t*2+m.x)*5;this.glow(m.x,y,20,'#ffe68844');c.fillStyle='#ffe9a8';c.save();c.translate(m.x,y);c.rotate(Math.PI/4);c.fillRect(-3.5,-3.5,7,7);c.restore()}
   if(r.ability&&!this.state[r.ability.type]){const a=r.ability,y=a.y+Math.sin(t*2)*7;this.glow(a.x,y,80,'#fff1b14f');c.save();c.translate(a.x,y);c.rotate(t*.25);c.strokeStyle='#ffecc0';c.lineWidth=2;c.strokeRect(-20,-20,40,40);c.restore();c.fillStyle='#fff3ca';c.font='32px Georgia';c.textAlign='center';c.fillText(a.type==='dash'?'ϟ':'✧',a.x,y+11);this.label(a.type==='dash'?'SUN DASH':'SKY FEATHER',a.x,y-48,'#ffedb5',13)}

@@ -44,17 +44,38 @@ Follow the eastward passages to Whisper Falls to find Sun Dash. Break the amber 
 - Controller gameplay/menu input, optional vibration, dash cooldown feedback, and a boss health bar.
 - Reduced-motion preferences disable camera shake and vibration and reduce interface animation.
 
+## Exploration update
+
+- The connected map shows actual passages, Sky Feather gates, the next objective, and suggested routes.
+- Select an area to see its outgoing passages and sunseed status. Adjacent destinations are revealed as you explore.
+- Rest with E / Y at a Sunwell to activate it. Open the map while standing beside a lit Sunwell, then select another lit Sunwell to travel there.
+- Entering an area no longer silently activates its checkpoint. Death and reload return to the last Sunwell where you rested; collected abilities, seeds, and defeated enemies remain saved.
+- Existing version-1 saves retain their previous checkpoint and gain the starting Sunwell. Previously visited areas still require a rest to unlock travel.
+- Restoring the forest stays complete after reloading. Lethal damage clears the old room’s projectiles and prevents pickups from that room during respawn.
+
+## Next development priorities
+
+1. **Combat readability and encounter balance:** improve enemy silhouettes and animations, add attack feedback, and tune the Keeper after complete keyboard/controller playtests.
+2. **Accessibility and player preferences:** persisted audio controls, an assist difficulty option, and remappable keyboard inputs; validate touch and physical controllers.
+3. **Exploration depth:** optional secrets and a meaningful use for collected light, followed by additional ability-gated rooms and rewards.
+
+The current development branch is `feature/exploration-progression`. Keep improvements on this branch until reviewed and merged, then update the hosted game.
+
 ## Implementation
 
 - `app/game.ts`: fixed-step 120 Hz physics, rooms, rendering, audio, persistence, and progression.
-- `app/page.tsx`: React game interface, map, guidance, pause menu, and touch input.
+- `app/page.tsx`: React game interface, guidance, pause menu, and touch input.
+- `app/world-map.tsx`: connected map, area details, and Sunwell travel.
 - `app/globals.css`: responsive interface styling.
 - `public/forest.png`, `public/*.webp`, `public/guardian.png`, and `public/guardian-run.png`: original AI-generated environment and character artwork.
-- `tests/gameplay.mjs`: 24 deterministic checks using mocked browser APIs, including combat, progression, save compatibility, controller mapping, and enemy attack timing. Hardware controller behavior still benefits from real-device playtesting.
+- `tests/gameplay.mjs`: 35 deterministic checks using mocked browser APIs, including combat, progression, save compatibility, controller mapping, enemy attack timing, travel restrictions, checkpoint migration, respawn isolation, and actual jumps to all three sunseeds (with enemies disabled to isolate geometry). Hardware controller behavior still benefits from real-device playtesting.
 
 ```sh
-node tests/gameplay.mjs
-node node_modules/typescript/bin/tsc --noEmit
+npm test
+npm run typecheck
+npm run build
 ```
+
+GitHub Actions runs the gameplay checks, TypeScript check, and production build on pushes and pull requests.
 
 The artwork uses a realistic forest backdrop with a stylized guardian and simple animated enemies. This is a compact 2D adventure rather than a large 3D game. The progress WebMCP tool is optional and feature-detected; unsupported browsers run the game normally.

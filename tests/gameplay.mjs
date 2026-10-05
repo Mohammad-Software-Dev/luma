@@ -9,7 +9,7 @@ globalThis.Image=class {complete=false;naturalWidth=0;set src(v){queueMicrotask(
 globalThis.ResizeObserver=class{observe(){}disconnect(){}};globalThis.requestAnimationFrame=()=>1;globalThis.cancelAnimationFrame=noop;
 let registered;document.modelContext={registerTool:async(t)=>{registered=t}};
 const gradient={addColorStop:noop};const context=new Proxy({measureText:()=>({width:100}),createLinearGradient:()=>gradient,createRadialGradient:()=>gradient},{get:(o,k)=>o[k]||noop,set:(o,k,v)=>{o[k]=v;return true}});
-const {Game,gamepadButtons}=await import('data:text/javascript;base64,'+Buffer.from(compiled).toString('base64'));
+const {Game,gamepadButtons,journeyRoute,journeyObjective,worldRegions}=await import('data:text/javascript;base64,'+Buffer.from(compiled).toString('base64'));
 const game=new Game({getContext:()=>context,getBoundingClientRect:()=>({width:1440,height:810})},noop);await game.ready;
 const run=(seconds)=>{for(let i=0;i<Math.round(seconds*120);i++){game.elapsed+=1/120;game.update(1/120)}};
 const tap=k=>{game.input(k,true);run(1/120);game.input(k,false)};
@@ -71,6 +71,75 @@ check('Losing focus pauses safely and clears held keys',()=>{
 });
 check('Very wide and narrow canvas sizes render without negative camera bounds',()=>{
  for(const width of [360,800,3000]){game.viewport=width;game.render();place(0,230);run(.03);assert.ok(game.camera>=0)}game.viewport=1440;
+});
+
+check('Suggested routes respect ability gates and show the next discovery',()=>{
+ game.start();assert.equal(journeyObjective(game.state).target,1);assert.deepEqual(journeyRoute(game.state,4),[]);
+ game.state.dash=true;assert.equal(journeyObjective(game.state).target,2);
+ game.state.doubleJump=true;assert.deepEqual(journeyRoute(game.state,4),[0,1,3,4]);
+ place(5,300);assert.equal(journeyObjective(game.state).target,5);game.state.seeds=[5];assert.equal(journeyObjective(game.state).target,2);
+ game.state.seeds=[2,4,5];assert.equal(journeyObjective(game.state).target,0);assert.ok(journeyObjective(game.state).detail.includes('Waking Glade'));
+ for(const region of worldRegions)for(const door of region.doors)assert.ok(worldRegions[door.to].doors.some(d=>d.to===region.id),'Every map passage has a return');
+});
+check('Entering Amber Hollow cannot move a checkpoint past the dash gate',()=>{
+ game.start();place(1,310);tap('KeyE');game.enter(2);assert.equal(game.checkpoint.room,1);assert.ok(game.player.x<590);assert.equal(game.state.shrines.includes(2),false);
+ game.save();game.start(true);assert.equal(game.state.room,1);assert.equal(game.state.dash,false);assert.equal(game.player.x,310);
+});
+check('Sunwells unlock travel only after resting; exploration alone does not',()=>{
+ game.start();game.enter(1);assert.equal(game.state.visited.includes(1),true);assert.equal(game.state.shrines.includes(1),false);
+ game.setPaused(true);place(0,230);assert.equal(game.travelTo(1),false);
+ game.setPaused(false);place(1,310);tap('KeyE');assert.ok(game.state.shrines.includes(1));assert.equal(game.checkpoint.room,1);
+ game.setPaused(true);game.player.vx=250;game.jumpBuffer=.14;game.attack=.2;game.projectiles=[{x:100,y:100,life:2}];assert.equal(game.travelTo(0),true);
+ assert.equal(game.player.x,230);assert.equal(game.player.vx,0);assert.equal(game.jumpBuffer,0);assert.equal(game.attack,0);assert.equal(game.projectiles.length,0);assert.equal(game.state.room,0);assert.equal(game.paused,true);assert.equal(game.checkpoint.room,0);
+ game.start(true);assert.deepEqual(game.state.shrines,[0,1]);assert.equal(game.state.room,0);
+});
+check('Travel rejects invalid destinations, midair use, and use away from a Sunwell',()=>{
+ game.start();game.state.shrines=[0,1];game.setPaused(true);
+ for(const target of [-1,6,1.5,NaN,Infinity,0])assert.equal(game.travelTo(target),false);
+ place(0,500);assert.equal(game.travelTo(1),false);place(0,230,620);assert.equal(game.travelTo(1),false);
+ place(0,230);game.player.grounded=false;assert.equal(game.travelTo(1),false);game.player.grounded=true;game.setPaused(false);assert.equal(game.travelTo(1),false);
+});
+check('Legacy saves retain their known checkpoint without lighting every visited room',()=>{
+ game.start();const old=JSON.parse(storage.get('luma-sunseed-v1'));delete old.shrines;old.visited=[0,1,2,3,4,5];old.room=2;old.checkpoint={room:2,x:1310,y:705};storage.set('luma-sunseed-v1',JSON.stringify(old));game.start(true);
+ assert.deepEqual(game.state.shrines,[0,2]);assert.equal(game.player.x,1310);
+ old.checkpoint={room:5,x:1e12,y:-9999};storage.set('luma-sunseed-v1',JSON.stringify(old));game.start(true);assert.equal(game.player.x,300);assert.equal(game.player.y,705);
+});
+check('Lethal contact leaves no projectiles or pickups from the old room',()=>{
+ game.start();place(1,310);tap('KeyE');place(2,1390);game.state.health=1;const e=game.world[2].enemies[0];e.home=1390;e.range=0;e.x=1390;
+ game.projectiles=[{x:100,y:100,vx:0,vy:0,life:5,radius:8}];run(1/120);assert.equal(game.state.room,1);assert.equal(game.player.x,310);assert.equal(game.state.health,5);assert.equal(game.projectiles.length,0);
+ place(2,910,545);game.state.health=1;game.state.doubleJump=false;game.projectiles=[{x:910,y:510,vx:0,vy:0,life:5,radius:8},{x:100,y:100,vx:0,vy:0,life:5,radius:8}];run(1/120);
+ assert.equal(game.state.room,1);assert.equal(game.state.doubleJump,false);assert.equal(game.projectiles.length,0);
+});
+check('Restoring the forest survives reload without repeating the finale',()=>{
+ game.start();game.state.seeds=[2,4,5];place(0,230);tap('KeyE');assert.equal(game.state.won,true);game.start(true);assert.equal(game.state.won,true);assert.equal(game.state.canTravel,false);
+});
+check('Amber sunseed can be reached with actual double-jump movement',()=>{
+ game.start();game.state.dash=true;game.state.doubleJump=true;game.broken.add(2);for(const e of game.world[2].enemies)e.hp=0;place(2,1310);
+ game.input('ArrowRight',true);game.input('Space',true);run(.42);game.input('Space',false);run(1/120);game.input('Space',true);run(.72);game.keys.clear();
+ assert.ok(game.state.seeds.includes(2),`Seed must be reachable by movement; player at ${game.player.x},${game.player.y}`);assert.equal(game.state.health,5);
+});
+
+check('Moonpetal sunseed is reachable from its Sunwell by climbing the terraces',()=>{
+ game.start();game.state.doubleJump=true;for(const e of game.world[4].enemies)e.hp=0;place(4,2120);
+ const leap=(first,second)=>{game.input('Space',true);run(first);game.input('Space',false);run(1/120);game.input('Space',true);run(second);game.input('Space',false)};
+ game.input('ArrowLeft',true);run(.4);leap(.42,.62);game.input('ArrowLeft',false);run(.65);
+ assert.equal(game.player.y,445,`first terrace ${game.player.x},${game.player.y}`);
+ game.input('ArrowLeft',true);leap(.42,.72);game.input('ArrowLeft',false);run(.65);
+ assert.ok(game.state.seeds.includes(4),`Moonpetal seed ${game.player.x},${game.player.y}`);assert.equal(game.state.health,5);
+});
+check('Sunspire sunseed is reachable from its Sunwell through the ruined platforms',()=>{
+ game.start();game.state.doubleJump=true;for(const e of game.world[5].enemies)e.hp=0;place(5,300);
+ const leap=(first,second)=>{game.input('Space',true);run(first);game.input('Space',false);run(1/120);game.input('Space',true);run(second);game.input('Space',false)};
+ game.input('ArrowRight',true);game.input('Space',true);run(1);game.input('Space',false);game.input('ArrowRight',false);run(.08);assert.equal(game.player.y,565);
+ game.input('ArrowRight',true);leap(.42,.72);game.input('ArrowRight',false);run(.65);assert.equal(game.player.y,435);
+ game.input('ArrowRight',true);game.input('Space',true);run(1.3);game.input('Space',false);game.input('ArrowRight',false);run(.08);assert.equal(game.player.y,535);
+ game.input('ArrowRight',true);leap(.42,.85);game.input('ArrowRight',false);run(.55);
+ assert.ok(game.state.seeds.includes(5),`Sunspire seed ${game.player.x},${game.player.y}`);assert.equal(game.state.health,5);
+});
+
+check('Passage arrival resets combat feedback without inheriting the previous boss',()=>{
+ game.start();game.state.doubleJump=true;place(5,2210);game.state.bossHealth=8;game.state.animation='dash';game.attackCooldown=.2;game.jumpBuffer=.1;tap('KeyE');
+ assert.equal(game.state.room,2);assert.equal(game.state.bossHealth,null);assert.equal(game.state.animation,'idle');assert.equal(game.jumpBuffer,0);assert.equal(game.attackCooldown,0);
 });
 
 game.destroy();console.log(`\n${tests} gameplay checks passed.`);
