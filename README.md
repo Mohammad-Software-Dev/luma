@@ -53,11 +53,19 @@ Follow the eastward passages to Whisper Falls to find Sun Dash. Break the amber 
 - Existing version-1 saves retain their previous checkpoint and gain the starting Sunwell. Previously visited areas still require a rest to unlock travel.
 - Restoring the forest stays complete after reloading. Lethal damage clears the old room’s projectiles and prevents pickups from that room during respawn.
 
+## Combat update
+
+- Distinct animated woodland creatures: leaf-winged moths, charging beetles, lantern flowers, and an owl-like Keeper.
+- Charging lanes, committed projectile fan warnings, and filling wind-up rings make each attack readable. Warning lines have dark outlines for bright backgrounds.
+- Strikes briefly stun regular enemies and make contact safe during recovery; danger returns when the creature recovers.
+- A 140 ms input buffer helps chain three strikes. Damage, finishers, parries, guarding, and awakenings have visible feedback. Pausing clears queued attacks.
+- The Keeper guards while preparing and opens after firing. Two well-timed three-hit counter windows can awaken it; its second phase has a wider fan and an explicit HUD cue.
+- Projectiles stop at terrain. Creature awakenings fade out instead of disappearing immediately; invulnerability uses a gentle opacity pulse instead of rapid blinking.
+
 ## Next development priorities
 
-1. **Combat readability and encounter balance:** improve enemy silhouettes and animations, add attack feedback, and tune the Keeper after complete keyboard/controller playtests.
-2. **Accessibility and player preferences:** persisted audio controls, an assist difficulty option, and remappable keyboard inputs; validate touch and physical controllers.
-3. **Exploration depth:** optional secrets and a meaningful use for collected light, followed by additional ability-gated rooms and rewards.
+1. **Accessibility and player preferences:** persisted audio controls, an assist difficulty option, and remappable keyboard inputs; validate touch and physical controllers.
+2. **Exploration depth:** optional secrets and a meaningful use for collected light, followed by additional ability-gated rooms and rewards.
 
 The current development branch is `feature/exploration-progression`. Keep improvements on this branch until reviewed and merged, then update the hosted game.
 
@@ -68,7 +76,7 @@ The current development branch is `feature/exploration-progression`. Keep improv
 - `app/world-map.tsx`: connected map, area details, and Sunwell travel.
 - `app/globals.css`: responsive interface styling.
 - `public/forest.png`, `public/*.webp`, `public/guardian.png`, and `public/guardian-run.png`: original AI-generated environment and character artwork.
-- `tests/gameplay.mjs`: 35 deterministic checks using mocked browser APIs, including combat, progression, save compatibility, controller mapping, enemy attack timing, travel restrictions, checkpoint migration, respawn isolation, and actual jumps to all three sunseeds (with enemies disabled to isolate geometry). Hardware controller behavior still benefits from real-device playtesting.
+- `tests/gameplay.mjs`: 45 deterministic checks using mocked browser APIs, including combat, progression, save compatibility, controller mapping, enemy attack timing, travel restrictions, checkpoint migration, respawn isolation, buffered combos, interruption and recovery, a full Keeper counter fight, projectile terrain collision, and actual jumps to all three sunseeds (with enemies disabled to isolate geometry). Hardware controller behavior still benefits from real-device playtesting.
 
 ```sh
 npm test

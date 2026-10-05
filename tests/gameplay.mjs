@@ -13,7 +13,7 @@ const {Game,gamepadButtons,journeyRoute,journeyObjective,worldRegions}=await imp
 const game=new Game({getContext:()=>context,getBoundingClientRect:()=>({width:1440,height:810})},noop);await game.ready;
 const run=(seconds)=>{for(let i=0;i<Math.round(seconds*120);i++){game.elapsed+=1/120;game.update(1/120)}};
 const tap=k=>{game.input(k,true);run(1/120);game.input(k,false)};
-const place=(room,x,y=705)=>{game.state.room=room;game.state.roomName=game.world[room].name;game.player={x,y,vx:0,vy:0,face:1,grounded:true};game.coyote=.12;game.invincible=0;game.dashCooldown=0;game.dashTime=0;game.usedDouble=false;game.hitStop=0;game.knockback=0;game.comboWindow=0;game.attack=0;game.attackCooldown=0;game.padKeys.clear();game.padPressed.clear();game.projectiles=[];game.keys.clear();game.pressed.clear()};
+const place=(room,x,y=705)=>{game.state.room=room;game.state.roomName=game.world[room].name;game.player={x,y,vx:0,vy:0,face:1,grounded:true};game.coyote=.12;game.invincible=0;game.dashCooldown=0;game.dashTime=0;game.usedDouble=false;game.hitStop=0;game.strikeBuffer=0;game.knockback=0;game.comboWindow=0;game.attack=0;game.attackCooldown=0;game.padKeys.clear();game.padPressed.clear();game.projectiles=[];game.keys.clear();game.pressed.clear()};
 let tests=0;function check(name,fn){fn();console.log('PASS',name);tests++}
 game.start();
 check('First jump reaches the 145px ability ledge',()=>{place(2,890);game.input('Space',true);let min=705;for(let i=0;i<90;i++){run(1/120);min=Math.min(min,game.player.y)}game.input('Space',false);assert.ok(min<560,`jump apex ${min} must be <560`)});
@@ -44,15 +44,15 @@ check('Controller polling creates one jump per press and clears input on disconn
 check('Chargers telegraph, lock their direction, then recover',()=>{
  place(0,1960);const e=game.world[0].enemies[1];e.hp=3;e.x=e.home;e.mode='patrol';e.timer=0;game.invincible=10;
  game.updateEnemies(.01);assert.equal(e.mode,'windup');assert.equal(e.direction,-1);const x=e.x;
- game.updateEnemies(.3);assert.equal(e.x,x);game.player.x=2300;game.updateEnemies(.41);assert.equal(e.mode,'attack');game.updateEnemies(.15);assert.ok(e.x<x);game.updateEnemies(.4);assert.equal(e.mode,'recover');
+ game.updateEnemies(.3);assert.equal(e.x,x);game.player.x=2300;game.updateEnemies(.51);assert.equal(e.mode,'attack');game.updateEnemies(.15);assert.ok(e.x<x);game.updateEnemies(.4);assert.equal(e.mode,'recover');
 });
 check('Sentries aim first and fire finite projectiles',()=>{
  place(1,1450);const e=game.world[1].enemies[1];e.hp=2;e.x=e.home;e.mode='patrol';e.timer=0;
- game.updateEnemies(.01);assert.equal(e.mode,'windup');assert.equal(game.projectiles.length,0);game.updateEnemies(.9);assert.equal(game.projectiles.length,1);assert.equal(e.mode,'recover');game.updateProjectiles(4);assert.equal(game.projectiles.length,0);
+ game.updateEnemies(.01);assert.equal(e.mode,'windup');assert.equal(game.projectiles.length,0);game.updateEnemies(.96);assert.equal(game.projectiles.length,1);assert.equal(e.mode,'recover');game.updateProjectiles(4);assert.equal(game.projectiles.length,0);
 });
 check('Keeper commits to telegraphs and changes its attack below half health',()=>{
  place(5,1700,400);const e=game.world[5].enemies[2];e.hp=8;e.x=e.home;e.timer=0;e.mode='patrol';game.invincible=10;
- game.updateEnemies(.01);game.updateEnemies(1.1);assert.equal(game.projectiles.length,3);
+ game.updateEnemies(.01);game.updateEnemies(1.21);assert.equal(game.projectiles.length,3);
  game.projectiles=[];e.hp=4;e.mode='patrol';e.timer=0;game.updateEnemies(.01);game.updateEnemies(1.1);assert.equal(game.projectiles.length,5);
 });
 check('Light strikes disperse incoming projectiles',()=>{
@@ -140,6 +140,49 @@ check('Sunspire sunseed is reachable from its Sunwell through the ruined platfor
 check('Passage arrival resets combat feedback without inheriting the previous boss',()=>{
  game.start();game.state.doubleJump=true;place(5,2210);game.state.bossHealth=8;game.state.animation='dash';game.attackCooldown=.2;game.jumpBuffer=.1;tap('KeyE');
  assert.equal(game.state.room,2);assert.equal(game.state.bossHealth,null);assert.equal(game.state.animation,'idle');assert.equal(game.jumpBuffer,0);assert.equal(game.attackCooldown,0);
+});
+
+check('A slightly early strike queues the next combo without auto-attacking',()=>{
+ game.start();place(0,1450);const e=game.world[0].enemies[0];e.hp=8;e.x=e.home=1510;e.range=0;
+ tap('KeyJ');assert.equal(e.hp,7);run(.22);tap('KeyJ');assert.equal(e.hp,7);run(.15);assert.equal(e.hp,6);assert.equal(game.state.combo,2);run(.9);assert.equal(e.hp,6);
+});
+check('Pausing clears queued attacks before resuming',()=>{
+ game.start();place(0,1450);const e=game.world[0].enemies[0];e.hp=8;e.x=e.home=1510;e.range=0;
+ tap('KeyJ');run(.22);tap('KeyJ');game.setPaused(true);game.setPaused(false);run(.4);assert.equal(e.hp,7);
+});
+check('Strikes interrupt a sentry wind-up and create a safe stun window',()=>{
+ game.start();place(1,1500);const e=game.world[1].enemies[1];e.x=e.home=1560;e.range=0;e.mode='windup';e.timer=.03;
+ tap('KeyJ');assert.equal(e.hp,1);assert.equal(e.mode,'recover');game.player.x=e.x;run(.3);assert.equal(game.projectiles.length,0);assert.equal(game.state.health,5);
+});
+check('The Keeper guards preparation but takes combo damage during recovery',()=>{
+ game.start();place(5,1720,400);const e=game.world[5].enemies[2];e.x=e.home=1840;e.range=0;e.timer=0;
+ run(1/120);tap('KeyJ');assert.equal(e.hp,8);assert.ok(game.combatTexts.some(t=>t.text==='GUARDED'));
+ run(1.21);assert.equal(e.mode,'recover');tap('KeyJ');assert.equal(e.hp,7);run(.34);tap('KeyJ');run(.34);tap('KeyJ');assert.equal(e.hp,4);assert.equal(e.enraged,true);
+});
+check('Two properly timed counter windows can complete the Keeper fight',()=>{
+ game.start();game.state.doubleJump=true;place(5,1720,400);const e=game.world[5].enemies[2];e.x=e.home=1840;e.range=0;e.timer=0;
+ const counter=()=>{let elapsed=0;while(e.mode!=='recover'&&elapsed<4){run(1/120);elapsed+=1/120}assert.equal(e.mode,'recover');for(let hit=0;hit<3;hit++){tap('KeyJ');run(.35)}};
+ counter();assert.equal(e.hp,4);while(e.mode==='recover')run(1/120);counter();assert.equal(e.hp,0);assert.equal(game.defeated.has(e.id),true);assert.equal(game.state.health,5);assert.equal(game.projectiles.length,0);
+ game.input('ArrowRight',true);run(.27);game.input('ArrowRight',false);assert.ok(game.state.seeds.includes(5),'The released seed can be picked up after the fight');
+});
+check('Projectiles hit terrain, including when a long step crosses an entire ledge',()=>{
+ game.start();place(5,1720,705);game.projectiles=[{x:1840,y:345,vx:0,vy:235,life:3,radius:10}];game.updateProjectiles(.5);assert.equal(game.projectiles.length,0);assert.equal(game.state.health,5);
+ place(0,350);game.projectiles=[{x:500,y:520,vx:0,vy:500,life:2,radius:8}];game.updateProjectiles(.4);assert.equal(game.projectiles.length,0);
+});
+check('Awakening a creature grants its light only once and removes contact damage',()=>{
+ game.start();place(0,1450);const e=game.world[0].enemies[0];e.x=e.home=1510;e.range=0;const light=game.state.light;
+ tap('KeyJ');run(.34);tap('KeyJ');assert.equal(e.hp,0);const reward=game.state.light;assert.ok(reward>=light+3);game.player.x=e.x;run(.34);tap('KeyJ');assert.equal(game.state.light,reward);assert.equal(game.state.health,5);
+});
+
+check('An early press outside the buffer window does not fire a late surprise strike',()=>{
+ game.start();place(0,1450);const e=game.world[0].enemies[0];e.hp=8;e.x=e.home=1510;e.range=0;tap('KeyJ');run(.04);tap('KeyJ');run(.5);assert.equal(e.hp,7);
+});
+check('Sentry warnings commit to the original target rather than tracking a dodge',()=>{
+ game.start();place(1,1420);const e=game.world[1].enemies[1];e.x=e.home=1560;e.range=0;e.timer=0;game.updateEnemies(.01);const aim=e.aimX;game.player.x=1750;game.updateEnemies(.96);
+ assert.equal(e.aimX,aim);assert.equal(game.projectiles.length,1);assert.ok(game.projectiles[0].vx<0,'The shot follows its displayed leftward warning');
+});
+check('Contact danger returns after a regular creature finishes recovering',()=>{
+ game.start();place(0,1510);const e=game.world[0].enemies[0];e.x=e.home=1510;e.range=0;e.mode='recover';e.timer=.05;game.updateEnemies(.03);assert.equal(game.state.health,5);game.updateEnemies(.03);assert.equal(game.state.health,4);
 });
 
 game.destroy();console.log(`\n${tests} gameplay checks passed.`);
