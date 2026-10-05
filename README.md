@@ -7,11 +7,17 @@ A complete small browser Metroidvania built with TypeScript, React, Canvas 2D, a
 Requires Node.js 22.13 or later.
 
 ```sh
+git clone https://github.com/Mohammad-Software-Dev/luma.git
+cd luma
 npm ci
 npm run dev
 ```
 
-Open the local address printed by the server. For a production build, run `npm run build`.
+Open **http://localhost:5173** (or the address printed by the server). Keep the terminal running; Ctrl+C stops the game server. To update an existing checkout, run `git pull` on `main` before starting it. Sound begins when you start your journey.
+
+Default controls: A/D or arrows to move, Space to jump, J to strike, Shift to dash after discovery, E to interact, M for the map, and Escape to pause. Keyboard controls can be changed in Game settings.
+
+For a production build, run `npm run build`.
 
 ## Controls
 
@@ -70,9 +76,17 @@ Follow the eastward passages to Whisper Falls to find Sun Dash. Break the amber 
 - Rebind movement, jump, strike, dash, interaction, and map keys. Hints and guidance update to match. Escape always pauses; conflicting keys are rejected. Default secondary aliases remain available until that action is remapped.
 - Preferences save separately from adventure progress. Starting a new journey keeps them; malformed settings safely fall back to defaults. When storage is unavailable, preferences still work for the session.
 
+## Memories and blessings update
+
+- Three optional Memory Blooms wait above the brook, falls, and canopy. Return with Sun Dash or the Sky Feather, then interact beside a bud to awaken it. Each grants 20 light and a short forest story, recorded on the map.
+- The map offers a clue before discovery and reveals the story afterward. These discoveries are optional; the three-sunseed finale remains unchanged.
+- Rest at a Sunwell to open its blessings menu. Heartwood costs 20 light for a sixth heart and 35 for a seventh. Glowkeeper costs 25 light and extends mote collection from 44 to 105 world pixels. It does not extend seed or memory collection.
+- Purchases require sufficient gathered light and a paused game beside a lit Sunwell. Completed upgrades cannot be purchased again. The pause menu and nearby Sunwell button can reopen blessings; the menu also leads to map travel.
+- Extra hearts apply to rest, death recovery, fast travel, and reloads. Blessings, spent light, and memories are saved together with the journey; version-1 saves without these fields still load. Starting a new journey resets them and preserves device preferences.
+
 ## Next development priorities
 
-1. **Exploration depth:** optional secrets and a meaningful use for collected light, followed by additional ability-gated rooms and rewards.
+1. **World expansion:** additional ability-gated rooms, distinct environmental challenges, and another movement reward.
 2. **Release playtesting:** physical controller and touch-device checks, browser audio checks, and a full playthrough before updating the hosted game.
 
 The previous development branch has been merged. Work continues directly on `main` as requested.
@@ -82,10 +96,11 @@ The previous development branch has been merged. Work continues directly on `mai
 - `app/game.ts`: fixed-step 120 Hz physics, rooms, rendering, audio, persistence, and progression.
 - `app/page.tsx`: React game interface, guidance, pause menu, and touch input.
 - `app/preferences.ts` and `app/game-settings.tsx`: validated device preferences, remapping, and accessible settings.
-- `app/world-map.tsx`: connected map, area details, and Sunwell travel.
+- `app/world-map.tsx`: connected map, memory clues and stories, area details, and Sunwell travel.
+- `app/sunwell.tsx`: blessing purchases and discovery guidance.
 - `app/globals.css`: responsive interface styling.
 - `public/forest.png`, `public/*.webp`, `public/guardian.png`, and `public/guardian-run.png`: original AI-generated environment and character artwork.
-- `tests/gameplay.mjs`: 59 deterministic checks using mocked browser APIs, including combat, progression, save compatibility, controller mapping, enemy attack timing, travel restrictions, checkpoint migration, respawn isolation, buffered combos, interruption and recovery, a full Keeper counter fight, projectile terrain collision, actual jumps to all three sunseeds (with enemies disabled to isolate geometry), preference validation and persistence, real keyboard remapping, assist difficulty, rumble suppression, and separate audio buses. Hardware controller behavior still benefits from real-device playtesting.
+- `tests/gameplay.mjs`: 72 deterministic checks using mocked browser APIs, including combat, progression, save compatibility, controller mapping, enemy attack timing, travel restrictions, checkpoint migration, respawn isolation, buffered combos, interruption and recovery, a full Keeper counter fight, projectile terrain collision, actual jumps to all three sunseeds (with enemies disabled to isolate geometry), preference validation and persistence, real keyboard remapping, assist difficulty, rumble suppression, separate audio buses, blessing costs and purchase restrictions, save migration, memory ability gates and one-time rewards, and real jumps to all three Memory Blooms. Hardware controller behavior still benefits from real-device playtesting.
 
 ```sh
 npm test

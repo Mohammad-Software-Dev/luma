@@ -12,7 +12,7 @@ globalThis.Image=class {complete=false;naturalWidth=0;set src(v){queueMicrotask(
 globalThis.ResizeObserver=class{observe(){}disconnect(){}};globalThis.requestAnimationFrame=()=>1;globalThis.cancelAnimationFrame=noop;
 let registered;document.modelContext={registerTool:async(t)=>{registered=t}};
 const gradient={addColorStop:noop};const context=new Proxy({measureText:()=>({width:100}),createLinearGradient:()=>gradient,createRadialGradient:()=>gradient},{get:(o,k)=>o[k]||noop,set:(o,k,v)=>{o[k]=v;return true}});
-const {Game,gamepadButtons,journeyRoute,journeyObjective,worldRegions}=await import('data:text/javascript;base64,'+Buffer.from(compiled).toString('base64'));
+const {Game,gamepadButtons,journeyRoute,journeyObjective,worldRegions,memoryBlooms,sunwellOffers}=await import('data:text/javascript;base64,'+Buffer.from(compiled).toString('base64'));
 const game=new Game({getContext:()=>context,getBoundingClientRect:()=>({width:1440,height:810})},noop);await game.ready;
 const run=(seconds)=>{for(let i=0;i<Math.round(seconds*120);i++){game.elapsed+=1/120;game.update(1/120)}};
 const tap=k=>{game.input(k,true);run(1/120);game.input(k,false)};
@@ -188,6 +188,75 @@ check('Contact danger returns after a regular creature finishes recovering',()=>
  game.start();place(0,1510);const e=game.world[0].enemies[0];e.x=e.home=1510;e.range=0;e.mode='recover';e.timer=.05;game.updateEnemies(.03);assert.equal(game.state.health,5);game.updateEnemies(.03);assert.equal(game.state.health,4);
 });
 
+
+check('Sunwell blessings spend exact light, grow hearts twice, and reject repeat purchases',()=>{
+ game.start();place(0,230);game.setPaused(true);game.state.light=19;assert.equal(game.buyBlessing('heart'),false);assert.equal(game.state.light,19);assert.equal(game.state.maxHealth,5);
+ game.state.light=20;assert.equal(game.buyBlessing('heart'),true);assert.equal(game.state.light,0);assert.equal(game.state.health,6);assert.equal(game.state.maxHealth,6);assert.equal(sunwellOffers(game.state)[0].cost,35);
+ game.state.light=60;assert.equal(game.buyBlessing('magnet'),true);assert.equal(game.state.light,35);assert.equal(game.state.magnet,true);assert.equal(game.buyBlessing('magnet'),false);
+ assert.equal(game.buyBlessing('heart'),true);assert.equal(game.state.light,0);assert.equal(game.state.maxHealth,7);assert.equal(game.state.heartLevel,2);game.state.light=100;assert.equal(game.buyBlessing('heart'),false);assert.equal(game.state.light,100);assert.equal(game.buyBlessing('unknown'),false);
+});
+check('Purchases require a paused game beside a lit grounded Sunwell',()=>{
+ game.start();game.state.light=100;place(0,230);assert.equal(game.buyBlessing('heart'),false);game.setPaused(true);
+ place(0,500);assert.equal(game.buyBlessing('heart'),false);assert.equal(game.openSunwell(),false);
+ place(0,230,630);assert.equal(game.buyBlessing('heart'),false);place(0,230);game.player.grounded=false;assert.equal(game.buyBlessing('heart'),false);
+ place(1,310);assert.equal(game.buyBlessing('heart'),false);game.state.shrines.push(1);game.state.won=true;assert.equal(game.buyBlessing('heart'),false);assert.equal(game.openSunwell(),false);assert.equal(game.state.light,100);
+ game.state.won=false;assert.equal(game.openSunwell(),true);assert.equal(game.paused,true);assert.equal(game.buyBlessing('heart'),true);
+});
+check('Extra hearts remain useful through rest, death, travel, and reload',()=>{
+ game.start();place(0,230);game.state.light=100;game.setPaused(true);game.buyBlessing('heart');game.buyBlessing('heart');game.buyBlessing('magnet');game.setPaused(false);game.state.health=2;tap('KeyE');assert.equal(game.state.health,7);
+ place(0,350);game.state.health=1;game.hurt(false);assert.equal(game.state.health,7);assert.equal(game.state.maxHealth,7);assert.equal(game.state.magnet,true);
+ game.state.shrines.push(1);place(0,230);game.setPaused(true);assert.equal(game.travelTo(1),true);assert.equal(game.state.health,7);game.start(true);assert.equal(game.state.room,1);assert.equal(game.state.heartLevel,2);assert.equal(game.state.health,7);assert.equal(game.state.magnet,true);assert.equal(game.state.light,20);
+});
+check('New journeys reset blessings and memories; legacy saves retain their light and route',()=>{
+ game.start();assert.equal(game.state.maxHealth,5);assert.equal(game.state.magnet,false);assert.deepEqual(game.state.discoveries,[]);
+ game.state.light=47;game.state.dash=true;game.state.doubleJump=true;game.save();const old=JSON.parse(storage.get('luma-sunseed-v1'));delete old.heartLevel;delete old.magnet;delete old.discoveries;storage.set('luma-sunseed-v1',JSON.stringify(old));game.start(true);
+ assert.equal(game.state.light,47);assert.equal(game.state.dash,true);assert.equal(game.state.doubleJump,true);assert.equal(game.state.maxHealth,5);assert.equal(game.state.magnet,false);assert.deepEqual(game.state.discoveries,[]);
+});
+check('Corrupt blessing and memory fields are sanitized without inflating hearts or currency',()=>{
+ game.start();game.save();const save=JSON.parse(storage.get('luma-sunseed-v1'));Object.assign(save,{heartLevel:999,maxHealth:999,magnet:'true',light:-10,discoveries:[memoryBlooms[0].id,memoryBlooms[0].id,'unknown',null]});storage.set('luma-sunseed-v1',JSON.stringify(save));game.start(true);
+ assert.equal(game.state.maxHealth,5);assert.equal(game.state.magnet,false);assert.equal(game.state.light,0);assert.deepEqual(game.state.discoveries,[memoryBlooms[0].id]);
+ save.heartLevel=1.5;save.discoveries={};save.light=12.9;storage.set('luma-sunseed-v1',JSON.stringify(save));game.start(true);assert.equal(game.state.maxHealth,5);assert.equal(game.state.light,12);assert.deepEqual(game.state.discoveries,[]);
+});
+check('Memory Blooms require their ability and an interaction; each grants light exactly once',()=>{
+ game.start();for(const bloom of memoryBlooms){for(const r of game.world){r.motes=[];for(const e of r.enemies)e.hp=0}place(bloom.room,bloom.x,bloom.y+35);game.state[bloom.needs]=false;
+  run(.01);assert.equal(game.state.discoveries.includes(bloom.id),false);tap('KeyE');assert.equal(game.state.discoveries.includes(bloom.id),false);
+  game.state[bloom.needs]=true;const light=game.state.light;tap('KeyE');assert.equal(game.state.discoveries.includes(bloom.id),true);assert.equal(game.state.light,light+20);tap('KeyE');assert.equal(game.state.light,light+20);
+ }assert.equal(game.state.discoveries.length,3);game.start(true);assert.equal(game.state.discoveries.length,3);assert.equal(game.state.light,60);assert.equal(game.state.seeds.length,0);
+ const bloom=memoryBlooms[0];game.world[0].motes=[];place(0,bloom.x,bloom.y+35);tap('KeyE');assert.equal(game.state.light,60);
+});
+check('Memories reject distant interactions and do not change the active Sunwell',()=>{
+ game.start();game.state.doubleJump=true;const checkpoint={...game.checkpoint};place(0,875,705);tap('KeyE');assert.equal(game.state.discoveries.length,0);assert.deepEqual(game.checkpoint,checkpoint);
+ place(0,875,450);tap('KeyE');assert.ok(game.state.discoveries.includes('brook-song'));assert.deepEqual(game.checkpoint,checkpoint);assert.deepEqual(game.state.shrines,[0]);
+});
+check('Glowkeeper extends mote collection without reaching remote seeds or Memory Blooms',()=>{
+ game.start();place(0,350);game.world[0].motes=[{id:'range-test',x:440,y:670}];run(.01);assert.equal(game.state.light,0);game.state.magnet=true;run(.01);assert.equal(game.state.light,1);assert.equal(game.collected.has('range-test'),true);run(.01);assert.equal(game.state.light,1);
+ game.world[0].motes=[];game.state.doubleJump=true;place(0,875,450);run(.01);assert.equal(game.state.discoveries.length,0);
+ const seed=game.world[2].seed;for(const e of game.world[2].enemies)e.hp=0;game.world[2].motes=[];place(2,seed.x-95,seed.y+35);run(.01);assert.equal(game.state.seeds.includes(2),false);
+});
+check('Main restoration stays completable without any optional memory or blessing',()=>{
+ game.start();game.state.seeds=[2,4,5];place(0,230);tap('KeyE');assert.equal(game.state.won,true);assert.equal(game.state.heartLevel,0);assert.equal(game.state.magnet,false);assert.equal(game.state.discoveries.length,0);
+});
+check('Every Memory Bloom sits above a real ledge and has a reachable-region hint',()=>{
+ for(const bloom of memoryBlooms){const room=game.world[bloom.room];assert.ok(room.platforms.some(p=>bloom.x>p.x&&bloom.x<p.x+p.w&&bloom.y+40===p.y));assert.ok(worldRegions[bloom.room].hasMemory);assert.ok(bloom.hint.length>20)}
+});
+
+check('Brook memory is reachable from the starting Sunwell using real jumps',()=>{
+ game.start();game.state.doubleJump=true;for(const e of game.world[0].enemies)e.hp=0;place(0,230);
+ game.input('ArrowRight',true);run(.3);game.input('Space',true);run(1);game.input('Space',false);game.input('ArrowRight',false);run(.15);assert.equal(game.player.y,575);
+ game.input('ArrowRight',true);game.input('Space',true);run(.42);game.input('Space',false);run(1/120);game.input('Space',true);run(.3);game.input('Space',false);game.input('ArrowRight',false);run(1.2);
+ assert.equal(game.player.y,455,`Brook ledge ${game.player.x},${game.player.y}`);tap('KeyE');assert.ok(game.state.discoveries.includes('brook-song'));
+});
+check('Waterfall memory is reachable from its Sunwell through two ordinary jumps',()=>{
+ game.start();game.state.dash=true;for(const e of game.world[1].enemies)e.hp=0;place(1,310);
+ for(const height of [560,460]){game.input('ArrowRight',true);game.input('Space',true);run(1);game.input('Space',false);game.input('ArrowRight',false);run(.15);assert.equal(game.player.y,height,`Falls ledge ${game.player.x},${game.player.y}`)}
+ tap('KeyE');assert.ok(game.state.discoveries.includes('waterfall-wish'));assert.equal(game.state.doubleJump,false);assert.equal(game.state.room,1);
+});
+check('Canopy memory is reachable from its Sunwell with a high double jump',()=>{
+ game.start();game.state.doubleJump=true;for(const e of game.world[3].enemies)e.hp=0;place(3,1140);
+ game.input('ArrowRight',true);game.input('Space',true);run(.42);game.input('Space',false);run(1/120);game.input('Space',true);run(.4);game.input('Space',false);game.input('ArrowRight',false);run(1);assert.equal(game.player.y,530);
+ game.input('ArrowRight',true);game.input('Space',true);run(.42);game.input('Space',false);run(1/120);game.input('Space',true);run(.45);game.input('Space',false);game.input('ArrowRight',false);run(1.1);
+ assert.equal(game.player.y,390,`Canopy ledge ${game.player.x},${game.player.y}`);tap('KeyE');assert.ok(game.state.discoveries.includes('wind-lullaby'));
+});
 
 check('Preferences round-trip independently of the adventure save',()=>{
  const progress=storage.get('luma-sunseed-v1');const value={...prefs.defaultPreferences(),muted:true,musicVolume:.2,effectsVolume:.4,assist:true,motion:'reduced',bindings:{...prefs.defaultBindings,jump:'KeyF'}};
