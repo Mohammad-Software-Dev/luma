@@ -26,9 +26,9 @@ Open the local address printed by the server. For a production build, run `npm r
 | M | World map |
 | Escape | Pause |
 
-Standard-mapped controllers are supported: left stick/D-pad to move, A to jump, X to strike, B/RB to dash, Y to interact, View to open the map, and Menu to pause. Use up/down and A to navigate menus; B closes a menu. Press a controller button to let the browser detect it. Nonstandard mappings fall back to keyboard/touch. Controller rumble is optional where the browser and hardware support it.
+Standard-mapped controllers are supported: left stick/D-pad to move, A to jump, X to strike, B/RB to dash, Y to interact, View to open the map, and Menu to pause. Use up/down and A to navigate menus; left/right adjusts volume and motion settings; B closes a menu. Press a controller button to let the browser detect it. Nonstandard mappings fall back to keyboard/touch. Controller rumble is optional where the browser and hardware support it.
 
-Touch controls appear on touch devices. Sound begins after starting the game. The toolbar offers mute, help, and fullscreen. Progress is saved in this browser on this device; it does not sync across devices. Older version-1 saves remain compatible, and defeated enemies now stay defeated after reloading. The game pauses when the browser loses focus or the active controller disconnects.
+Touch controls appear on touch devices. Sound begins after starting the game. The toolbar offers saved mute, help, and game settings; fullscreen is in the footer. Progress is saved in this browser on this device; it does not sync across devices. Older version-1 saves remain compatible, and defeated enemies now stay defeated after reloading. The game pauses when the browser loses focus or the active controller disconnects.
 
 ## Adventure
 
@@ -62,21 +62,30 @@ Follow the eastward passages to Whisper Falls to find Sun Dash. Break the amber 
 - The Keeper guards while preparing and opens after firing. Two well-timed three-hit counter windows can awaken it; its second phase has a wider fan and an explicit HUD cue.
 - Projectiles stop at terrain. Creature awakenings fade out instead of disappearing immediately; invulnerability uses a gentle opacity pulse instead of rapid blinking.
 
+## Comfort and controls update
+
+- Settings are available from the title toolbar and pause menu. Music and game sounds have separate volume controls, alongside saved mute and optional controller vibration.
+- Reduced motion can follow the device preference or be enabled explicitly. It removes camera shake and vibration and reduces interface and decorative animation.
+- Gentle Journey lengthens attack warnings and recovery windows, slows charge/projectile attacks, extends damage immunity to 2.4 seconds, and makes falls free of heart loss. It preserves movement upgrades and all objectives.
+- Rebind movement, jump, strike, dash, interaction, and map keys. Hints and guidance update to match. Escape always pauses; conflicting keys are rejected. Default secondary aliases remain available until that action is remapped.
+- Preferences save separately from adventure progress. Starting a new journey keeps them; malformed settings safely fall back to defaults. When storage is unavailable, preferences still work for the session.
+
 ## Next development priorities
 
-1. **Accessibility and player preferences:** persisted audio controls, an assist difficulty option, and remappable keyboard inputs; validate touch and physical controllers.
-2. **Exploration depth:** optional secrets and a meaningful use for collected light, followed by additional ability-gated rooms and rewards.
+1. **Exploration depth:** optional secrets and a meaningful use for collected light, followed by additional ability-gated rooms and rewards.
+2. **Release playtesting:** physical controller and touch-device checks, browser audio checks, and a full playthrough before updating the hosted game.
 
-The current development branch is `feature/exploration-progression`. Keep improvements on this branch until reviewed and merged, then update the hosted game.
+The previous development branch has been merged. Work continues directly on `main` as requested.
 
 ## Implementation
 
 - `app/game.ts`: fixed-step 120 Hz physics, rooms, rendering, audio, persistence, and progression.
 - `app/page.tsx`: React game interface, guidance, pause menu, and touch input.
+- `app/preferences.ts` and `app/game-settings.tsx`: validated device preferences, remapping, and accessible settings.
 - `app/world-map.tsx`: connected map, area details, and Sunwell travel.
 - `app/globals.css`: responsive interface styling.
 - `public/forest.png`, `public/*.webp`, `public/guardian.png`, and `public/guardian-run.png`: original AI-generated environment and character artwork.
-- `tests/gameplay.mjs`: 45 deterministic checks using mocked browser APIs, including combat, progression, save compatibility, controller mapping, enemy attack timing, travel restrictions, checkpoint migration, respawn isolation, buffered combos, interruption and recovery, a full Keeper counter fight, projectile terrain collision, and actual jumps to all three sunseeds (with enemies disabled to isolate geometry). Hardware controller behavior still benefits from real-device playtesting.
+- `tests/gameplay.mjs`: 59 deterministic checks using mocked browser APIs, including combat, progression, save compatibility, controller mapping, enemy attack timing, travel restrictions, checkpoint migration, respawn isolation, buffered combos, interruption and recovery, a full Keeper counter fight, projectile terrain collision, actual jumps to all three sunseeds (with enemies disabled to isolate geometry), preference validation and persistence, real keyboard remapping, assist difficulty, rumble suppression, and separate audio buses. Hardware controller behavior still benefits from real-device playtesting.
 
 ```sh
 npm test

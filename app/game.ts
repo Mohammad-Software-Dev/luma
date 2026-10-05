@@ -1,3 +1,4 @@
+import { canonicalKeys, keyboardAction, keyLabel, normalizePreferences, readPreferences, type ControlAction, type Preferences } from './preferences';
 /** Luma's deterministic, fixed-step TypeScript game engine. No remote services. */
 export interface Snapshot {room:number;roomName:string;health:number;light:number;seeds:number[];dash:boolean;doubleJump:boolean;visited:number[];shrines:number[];canTravel:boolean;time:number;won:boolean;message:string;controller:boolean;dashCharge:number;bossHealth:number|null;bossMaxHealth:number;bossIntent:string;combo:number;animation:string}
 type Platform={x:number;y:number;w:number;h:number};
@@ -6,7 +7,7 @@ type Mote={x:number;y:number;id:string};
 type EnemyKind='drifter'|'charger'|'sentry'|'keeper';
 type Enemy={x:number;y:number;home:number;range:number;phase:number;hp:number;hit:number;kind:EnemyKind;mode:'patrol'|'windup'|'attack'|'recover';timer:number;aimX:number;aimY:number;direction:number;maxHp:number;id:string;windup:number;defeat:number;enraged:boolean};
 type Projectile={x:number;y:number;vx:number;vy:number;life:number;radius:number};
-export type MenuAction='pause'|'map'|'confirm'|'back'|'next'|'previous'|'focusLost';
+export type MenuAction='pause'|'map'|'confirm'|'back'|'next'|'previous'|'focusLost'|'decrease'|'increase';
 /** Standard Gamepad mapping only; unknown layouts deliberately fall back to keyboard. */
 export function gamepadButtons(pad:Pick<Gamepad,'mapping'|'axes'|'buttons'>){
  const keys=new Set<string>(), menus=new Set<MenuAction>();
@@ -15,6 +16,7 @@ export function gamepadButtons(pad:Pick<Gamepad,'mapping'|'axes'|'buttons'>){
  if(x<-.24||b(14))keys.add('ArrowLeft');if(x>.24||b(15))keys.add('ArrowRight');
  if(b(0))keys.add('Space');if(b(2))keys.add('KeyJ');if(b(1)||b(5)||b(7))keys.add('ShiftLeft');if(b(3))keys.add('KeyE');
  if(b(9))menus.add('pause');if(b(8))menus.add('map');if(b(0))menus.add('confirm');if(b(1))menus.add('back');
+ if(x<-.55||b(14))menus.add('decrease');if(x>.55||b(15))menus.add('increase');
  if(y>.55||b(13))menus.add('next');if(y<-.55||b(12))menus.add('previous');
  return {keys,menus};
 }
@@ -73,12 +75,13 @@ export function combatProfile(kind:EnemyKind,enraged=false){
 
 export class Game {
  ready:Promise<void>;state:Snapshot={room:0,roomName:'The Waking Glade',health:5,light:0,seeds:[],dash:false,doubleJump:false,visited:[0],shrines:[0],canTravel:false,time:0,won:false,message:'',controller:false,dashCharge:1,bossHealth:null,bossMaxHealth:8,bossIntent:'',combo:0,animation:'idle'};
+ private preferences=readPreferences();private keyboardHeld=new Map<string,ControlAction>();private motionQuery:MediaQueryList|undefined;private musicBus:GainNode|null=null;private effectsBus:GainNode|null=null;
  private strikeBuffer=0;private combatTexts:CombatText[]=[];private respawns=0;private backdrops:HTMLImageElement[]=[];private runSheet=new Image();private padKeys=new Set<string>();private padPressed=new Set<string>();private padMenus=new Set<MenuAction>();private activePad:Gamepad|null=null;private gamepadActive=false;private projectiles:Projectile[]=[];private defeated=new Set<string>();private swingHits=new Set<string>();private combo=0;private comboWindow=0;private hitStop=0;private knockback=0;private landing=0;private runCycle=0;private stepDistance=0;private lastFacing=1;private reducedMotion=false;private backdropLoads=new Map<number,Promise<void>>();
  private ctx:CanvasRenderingContext2D;private bg=new Image();private sprite=new Image();private world=rooms();private keys=new Set<string>();private pressed=new Set<string>();private collected=new Set<string>();private broken=new Set<number>();private particles:Particle[]=[];private paused=true;private started=false;private stopped=false;private raf=0;private last=0;private accumulator=0;private elapsed=0;private messageUntil=0;private camera=0;private viewport=1440;private scale=1;private checkpoint={room:0,x:230,y:705};private saveAvailable=true;private mute=false;private audio:AudioContext|null=null;private music=0;private nextNote=0;private invincible=0;private shake=0;private attack=0;private attackCooldown=0;private dashTime=0;private dashCooldown=0;private coyote=0;private jumpBuffer=0;private usedDouble=false;private transition=0;private lastPublish=0;private safe={x:230,y:705};private player={x:230,y:705,vx:0,vy:0,face:1,grounded:true};private resize:ResizeObserver;private lifecycle=new AbortController();private ambient:Array<{x:number;y:number;s:number;phase:number}>=[];
  constructor(private canvas:HTMLCanvasElement,private onUpdate:(s:Snapshot)=>void,private onMenu:(action:MenuAction)=>void=()=>{}){
   this.ctx=canvas.getContext('2d',{alpha:false})!;
   this.backdrops=[this.bg,...Array.from({length:5},()=>new Image())];
-  this.reducedMotion=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches??false;
+  this.motionQuery=window.matchMedia?.('(prefers-reduced-motion: reduce)');this.motionQuery?.addEventListener?.('change',this.motionChanged);this.setPreferences(this.preferences);
   this.ready=Promise.all([this.load(this.bg,'/forest.png'),this.load(this.sprite,'/guardian.png')]).then(()=>{this.render();void this.load(this.runSheet,'/guardian-run.png').catch(()=>{});});
   // Start nearby area downloads now; each room keeps a graceful backdrop fallback.
   for(let room=1;room<6;room++)void this.loadBackdrop(room);
@@ -96,14 +99,26 @@ export class Game {
   const pending=this.load(this.backdrops[room],`/${names[room]}.webp`).catch(()=>{this.backdropLoads.delete(room)});this.backdropLoads.set(room,pending);return pending;
  }
  private fit(){const r=this.canvas.getBoundingClientRect(),dpr=Math.min(window.devicePixelRatio||1,2);this.canvas.width=Math.round(r.width*dpr);this.canvas.height=Math.round(r.height*dpr);this.scale=this.canvas.height/H;this.viewport=this.canvas.width/this.scale;}
- private keydown=(e:KeyboardEvent)=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space','KeyA','KeyD','KeyW','KeyJ','KeyX','KeyK','KeyE','ShiftLeft','ShiftRight'].includes(e.code)){if(this.started&&!this.paused){e.preventDefault();this.input(e.code,true)}}};
- private keyup=(e:KeyboardEvent)=>{this.input(e.code,false)};
- private clearInput(){this.keys.clear();this.pressed.clear();this.padKeys.clear();this.padPressed.clear();this.strikeBuffer=0;this.jumpBuffer=0;this.accumulator=0}
+ private keydown=(e:KeyboardEvent)=>{
+  if(e.defaultPrevented||e.ctrlKey||e.metaKey||e.altKey||(e.target as HTMLElement|null)?.closest?.('input,select,textarea,button,[contenteditable="true"]'))return;
+  const action=keyboardAction(e.code,this.preferences.bindings);
+  if(action&&action!=='map'&&this.started&&!this.paused){e.preventDefault();this.keyboardHeld.set(e.code,action);this.input(canonicalKeys[action],true)}
+ };
+ private keyup=(e:KeyboardEvent)=>{const action=this.keyboardHeld.get(e.code);this.keyboardHeld.delete(e.code);if(action&&![...this.keyboardHeld.values()].includes(action))this.input(canonicalKeys[action],false)};
+ private clearInput(){this.keyboardHeld.clear();this.keys.clear();this.pressed.clear();this.padKeys.clear();this.padPressed.clear();this.strikeBuffer=0;this.jumpBuffer=0;this.accumulator=0}
+ private motionChanged=()=>{this.reducedMotion=this.preferences.motion==='reduced'||!!this.motionQuery?.matches;if(this.reducedMotion)this.shake=0};
+ getPreferences(){return normalizePreferences(this.preferences)}
+ setPreferences(value:Preferences){
+  const next=normalizePreferences(value);if(JSON.stringify(next.bindings)!==JSON.stringify(this.preferences.bindings))this.clearInput();
+  this.preferences=next;this.motionChanged();this.setMuted(next.muted);this.applyAudioPreferences();
+ }
+ private applyAudioPreferences(){if(!this.audio)return;this.musicBus?.gain.setTargetAtTime(this.preferences.musicVolume,this.audio.currentTime,.03);this.effectsBus?.gain.setTargetAtTime(this.preferences.effectsVolume,this.audio.currentTime,.03)}
+ private enemyProfile(e:Enemy){const base=combatProfile(e.kind,e.kind==='keeper'&&e.hp<=4);return this.preferences.assist?{...base,windup:base.windup*1.45,recovery:base.recovery*1.4,speed:base.speed*.8}:base}
  private blur=()=>{this.clearInput();if(this.started&&!this.paused&&!this.state.won){this.setPaused(true);this.onMenu('focusLost')}};
  private visibility=()=>{if(document.hidden){this.blur();this.save();this.audio?.suspend().catch(()=>{})}else if(!this.paused&&!this.mute)this.audio?.resume().catch(()=>{})};
  input(key:string,down:boolean){if(down&&!this.paused){if(!this.keys.has(key))this.pressed.add(key);this.keys.add(key)}else this.keys.delete(key)}
  setPaused(value:boolean){this.paused=value;this.clearInput();if(value)this.audio?.suspend().catch(()=>{});else if(!this.mute)this.audio?.resume().catch(()=>{})}
- setMuted(value:boolean){this.mute=value;if(value)this.audio?.suspend().catch(()=>{});else if(!this.paused)this.audio?.resume().catch(()=>{})}
+ setMuted(value:boolean){this.preferences.muted=value;this.mute=value;if(value)this.audio?.suspend().catch(()=>{});else if(!this.paused)this.audio?.resume().catch(()=>{})}
  hasSave(){try{return !!this.readSave()}catch{return false}}
  private readSave(){try{
   const raw=localStorage.getItem(SAVE_KEY);if(!raw)return null;const s=JSON.parse(raw);
@@ -117,14 +132,14 @@ export class Game {
  }catch{return null}}
 
  start(resume=false){
-  this.world=rooms();this.collected.clear();this.broken.clear();this.defeated.clear();this.particles=[];this.projectiles=[];this.swingHits.clear();this.combo=0;this.comboWindow=0;this.strikeBuffer=0;this.combatTexts=[];this.hitStop=0;this.landing=0;this.knockback=0;this.runCycle=0;this.stepDistance=0;this.lastPublish=0;this.state={room:0,roomName:'The Waking Glade',health:5,light:0,seeds:[],dash:false,doubleJump:false,visited:[0],shrines:[0],canTravel:false,time:0,won:false,message:'',controller:false,dashCharge:1,bossHealth:null,bossMaxHealth:8,bossIntent:'',combo:0,animation:'idle'};this.checkpoint={room:0,x:230,y:705};
+  this.clearInput();this.world=rooms();this.collected.clear();this.broken.clear();this.defeated.clear();this.particles=[];this.projectiles=[];this.swingHits.clear();this.combo=0;this.comboWindow=0;this.strikeBuffer=0;this.combatTexts=[];this.hitStop=0;this.landing=0;this.knockback=0;this.runCycle=0;this.stepDistance=0;this.lastPublish=0;this.state={room:0,roomName:'The Waking Glade',health:5,light:0,seeds:[],dash:false,doubleJump:false,visited:[0],shrines:[0],canTravel:false,time:0,won:false,message:'',controller:false,dashCharge:1,bossHealth:null,bossMaxHealth:8,bossIntent:'',combo:0,animation:'idle'};this.checkpoint={room:0,x:230,y:705};
   const s=resume?this.readSave():null;if(s){this.state={...this.state,room:s.room,seeds:[...new Set<number>(s.seeds)],dash:!!s.dash,doubleJump:!!s.doubleJump,light:Number.isFinite(s.light)?Math.max(0,s.light):0,visited:s.visited.filter((n:number)=>Number.isInteger(n)&&n>=0&&n<6),shrines:s.shrines,won:!!s.won&&new Set(s.seeds).size===3,time:Number.isFinite(s.time)?Math.max(0,s.time):0};this.collected=new Set(s.collected.filter((n:unknown)=>typeof n==='string'));this.broken=new Set(Array.isArray(s.broken)?s.broken.filter((n:unknown)=>n===2):[]);this.defeated=new Set(Array.isArray(s.defeated)?s.defeated.filter((n:unknown)=>typeof n==='string'):[]);for(const room of this.world)for(const e of room.enemies)if(this.defeated.has(e.id))e.hp=0;if(s.checkpoint&&Number.isInteger(s.checkpoint.room)&&s.checkpoint.room>=0&&s.checkpoint.room<6&&Number.isFinite(s.checkpoint.x))this.checkpoint=s.checkpoint;}
   this.player={x:s?this.checkpoint.x:230,y:705,vx:0,vy:0,face:1,grounded:true};this.state.room=s?this.checkpoint.room:0;this.state.roomName=this.world[this.state.room].name;if(!this.state.visited.includes(this.state.room))this.state.visited.push(this.state.room);this.safe={x:this.player.x,y:705};this.camera=Math.max(0,this.player.x-this.viewport*.35);this.invincible=0;this.attack=0;this.attackCooldown=0;this.dashTime=0;this.dashCooldown=0;this.transition=0;this.coyote=.1;this.jumpBuffer=0;this.usedDouble=false;this.started=true;this.paused=false;
-  try{if(!this.audio||this.audio.state==='closed')this.audio=new AudioContext();if(!this.mute)this.audio.resume().catch(()=>{})}catch{}
+  try{if(!this.audio||this.audio.state==='closed'){this.audio=new AudioContext();this.musicBus=this.audio.createGain();this.effectsBus=this.audio.createGain();this.musicBus.connect(this.audio.destination);this.effectsBus.connect(this.audio.destination);this.applyAudioPreferences();}if(!this.mute)this.audio.resume().catch(()=>{})}catch{}
   this.toast(s?'Welcome back, little light.':'Follow the fireflies. Your adventure begins to the east.');this.save();this.publish();
  }
  save(){if(!this.started)return;try{localStorage.setItem(SAVE_KEY,JSON.stringify({version:1,room:this.state.room,checkpoint:this.checkpoint,seeds:this.state.seeds,dash:this.state.dash,doubleJump:this.state.doubleJump,light:this.state.light,visited:this.state.visited,shrines:this.state.shrines,won:this.state.won,time:this.state.time,collected:[...this.collected],broken:[...this.broken],defeated:[...this.defeated]}))}catch{this.saveAvailable=false}}
- destroy(){this.stopped=true;cancelAnimationFrame(this.raf);this.resize.disconnect();this.lifecycle.abort();window.removeEventListener('keydown',this.keydown);window.removeEventListener('keyup',this.keyup);window.removeEventListener('blur',this.blur);document.removeEventListener('visibilitychange',this.visibility);this.save();this.audio?.close().catch(()=>{})}
+ destroy(){this.motionQuery?.removeEventListener?.('change',this.motionChanged);this.stopped=true;cancelAnimationFrame(this.raf);this.resize.disconnect();this.lifecycle.abort();window.removeEventListener('keydown',this.keydown);window.removeEventListener('keyup',this.keyup);window.removeEventListener('blur',this.blur);document.removeEventListener('visibilitychange',this.visibility);this.save();this.audio?.close().catch(()=>{})}
  private frame=(now:number)=>{if(this.stopped)return;this.pollGamepad();const dt=Math.min((now-(this.last||now))/1000,.05);this.last=now;this.elapsed+=dt;if(!this.paused&&!document.hidden&&!this.state.won){this.accumulator+=dt;while(this.accumulator>=1/120){this.update(1/120);this.accumulator-=1/120}}this.render();this.raf=requestAnimationFrame(this.frame)};
  private held(...keys:string[]){return keys.some(k=>this.keys.has(k)||this.padKeys.has(k))}
  private tap(...keys:string[]){return keys.some(k=>this.pressed.has(k)||this.padPressed.has(k))}
@@ -153,7 +168,7 @@ export class Game {
   if(this.dashTime<=0){const gravity=p.vy<0&&!this.held('Space','KeyW','ArrowUp')?2300:1550;p.vy=Math.min(1000,p.vy+gravity*dt)}
   p.y+=p.vy*dt;p.grounded=false;
   for(const plat of r.platforms){if(p.x+18>plat.x&&p.x-18<plat.x+plat.w&&p.vy>=0&&oldY<=plat.y+2&&p.y>=plat.y){if(!wasGrounded&&p.vy>230){this.landing=.15;this.burst(p.x,plat.y,8,'#d6d3a0');this.tone(110,.06,'triangle',.015)}p.y=plat.y;p.vy=0;p.grounded=true;this.coyote=.12;this.usedDouble=false;if(plat.y===705){this.safe={x:p.x,y:p.y}}}}
-  if(this.state.room===2&&!this.broken.has(2)&&p.x+18>590&&p.x-18<635&&p.y>430){if(this.dashTime>0){this.broken.add(2);this.burst(612,580,55,'#ffc478');this.shake=this.reducedMotion?0:8;this.toast('A new path opens. Keep growing, little light.');this.save()}else{p.x=oldX<610?571:654;p.vx=0;if(this.tap('KeyE','ArrowDown'))this.toast('Amber thorns yield to Sun Dash. Press Shift.')}}
+  if(this.state.room===2&&!this.broken.has(2)&&p.x+18>590&&p.x-18<635&&p.y>430){if(this.dashTime>0){this.broken.add(2);this.burst(612,580,55,'#ffc478');this.shake=this.reducedMotion?0:8;this.toast('A new path opens. Keep growing, little light.');this.save()}else{p.x=oldX<610?571:654;p.vx=0;if(this.tap('KeyE','ArrowDown'))this.toast(`Amber thorns yield to Sun Dash. Press ${keyLabel(this.preferences.bindings.dash)}.`)}}
   p.x=Math.max(25,Math.min(W-25,p.x));
   if(p.y>H+130){this.hurt(true);this.pressed.clear();return}
   const respawns=this.respawns;this.updateEnemies(dt);if(this.respawns!==respawns){this.clearInput();return}this.updateProjectiles(dt);if(this.respawns!==respawns){this.clearInput();return}
@@ -173,13 +188,13 @@ export class Game {
   this.state.animation=this.dashTime>0?'dash':this.attack>0?'strike':this.knockback>0?'hurt':!p.grounded?p.vy<0?'jump':'fall':this.landing>0?'land':Math.abs(p.vx)>40?'run':'idle';
   this.state.dashCharge=Math.max(0,1-this.dashCooldown/.7);const boss=r.enemies.find(e=>e.kind==='keeper'&&e.hp>0);this.state.bossHealth=boss&&Math.abs(boss.x-p.x)<750?boss.hp:null;
   this.camera+=(Math.max(0,Math.min(W-this.viewport,p.x-this.viewport*.4))-this.camera)*Math.min(1,dt*5);
-  if(this.elapsed>this.nextNote){const notes=[261.63,329.63,392,523.25,440,392,329.63,293.66];this.tone(notes[this.music++%notes.length],1.7,'sine',.014);this.nextNote=this.elapsed+1.4}
+  if(this.elapsed>this.nextNote){const notes=[261.63,329.63,392,523.25,440,392,329.63,293.66];this.tone(notes[this.music++%notes.length],1.7,'sine',.014,'music');this.nextNote=this.elapsed+1.4}
   if(this.state.time-this.lastPublish>.1){this.lastPublish=this.state.time;this.publish()}
   this.pressed.clear();this.padPressed.clear();
  }
  private settlePlayer(x:number,y=705,face=1){
   this.clearInput();this.projectiles=[];this.swingHits.clear();this.attack=0;this.attackCooldown=0;this.combo=0;this.comboWindow=0;this.strikeBuffer=0;this.combatTexts=[];this.dashTime=0;this.dashCooldown=0;this.usedDouble=false;this.hitStop=0;this.knockback=0;this.jumpBuffer=0;this.coyote=.12;this.landing=0;
-  this.player={x,y,vx:0,vy:0,face,grounded:true};this.safe={x,y};this.invincible=1.6;this.state.bossHealth=null;this.state.bossIntent='';this.state.combo=0;this.state.animation='idle';this.state.dashCharge=1;this.camera=Math.max(0,Math.min(W-this.viewport,x-this.viewport*.4));this.transition=.6;void this.loadBackdrop(this.state.room);
+  this.player={x,y,vx:0,vy:0,face,grounded:true};this.safe={x,y};this.invincible=this.preferences.assist?2.4:1.6;this.state.bossHealth=null;this.state.bossIntent='';this.state.combo=0;this.state.animation='idle';this.state.dashCharge=1;this.camera=Math.max(0,Math.min(W-this.viewport,x-this.viewport*.4));this.transition=.6;void this.loadBackdrop(this.state.room);
  }
  private enter(to:number){
   const previous=this.state.room,r=this.world[to],back=r.doors.find(d=>d.to===previous);
@@ -195,7 +210,7 @@ export class Game {
   if(!this.state.visited.includes(to))this.state.visited.push(to);this.checkpoint={room:to,x,y:705};this.settlePlayer(x);this.save();this.chime();this.toast(`The light carries you to ${worldRegions[to].name}.`);this.publish();return true;
  }
  private hurt(fall:boolean){
-  if(this.invincible>0&&!fall)return;this.state.health--;this.invincible=1.6;this.shake=this.reducedMotion?0:6;this.rumble(.35,120);this.burst(this.player.x,this.player.y-25,22,'#ffb991');this.tone(130,.18,'triangle',.06);
+  if(this.invincible>0&&!fall)return;if(!fall||!this.preferences.assist)this.state.health--;this.invincible=this.preferences.assist?2.4:1.6;this.shake=this.reducedMotion?0:6;this.rumble(.35,120);this.burst(this.player.x,this.player.y-25,22,'#ffb991');this.tone(130,.18,'triangle',.06);
   if(this.state.health<=0){this.respawns++;this.state.health=5;this.state.room=this.checkpoint.room;this.state.roomName=this.world[this.state.room].name;this.settlePlayer(this.checkpoint.x);this.toast('A little rest, a little courage. Your light is safe.');this.save()}
   else if(fall){this.player.x=this.safe.x;this.player.y=this.safe.y;this.player.vx=0;this.player.vy=0;this.toast('The forest caught you. Try another leap.')}
   else{this.knockback=.16;this.player.vx=-this.player.face*240;this.player.vy=-220}
@@ -217,7 +232,7 @@ export class Game {
  }
  private rumble(strength:number,duration:number){
   const actuator=(this.activePad as (Gamepad&{vibrationActuator?:{playEffect:(type:string,options:object)=>Promise<unknown>}})|null)?.vibrationActuator;
-  if(actuator&&!this.reducedMotion){try{void actuator.playEffect('dual-rumble',{duration,weakMagnitude:strength,strongMagnitude:strength*.6}).catch(()=>{})}catch{}}
+  if(actuator&&this.preferences.rumble&&!this.reducedMotion){try{void actuator.playEffect('dual-rumble',{duration,weakMagnitude:strength,strongMagnitude:strength*.6}).catch(()=>{})}catch{}}
  }
  private seedGuarded(room:Room){return !!room.seed&&room.enemies.some(e=>e.hp>0&&Math.hypot(e.home-room.seed!.x,e.y-room.seed!.y)<220)}
  private combatText(x:number,y:number,text:string,color='#ffe8b4'){
@@ -240,7 +255,7 @@ export class Game {
   for(const e of this.world[this.state.room].enemies){
    if(e.hp<=0){e.defeat=Math.max(0,e.defeat-dt);continue}
    e.phase+=dt*.8;e.hit=Math.max(0,e.hit-dt);e.timer=Math.max(0,e.timer-dt);
-   const profile=combatProfile(e.kind,e.kind==='keeper'&&e.hp<=4);
+   const profile=this.enemyProfile(e);
    const close=Math.abs(p.x-e.x)<(e.kind==='keeper'?580:e.kind==='sentry'?470:320)&&Math.abs(p.y-35-e.y)<(e.kind==='charger'?100:330);
    if(e.mode==='recover'){
     if(e.timer<=0){e.mode='patrol';e.timer=.45;}
@@ -289,13 +304,13 @@ export class Game {
    const color=e.kind==='charger'?'#edba85':e.kind==='sentry'?'#98dfd7':boss?'#edd082':'#c3a5d7',windup=e.mode==='windup'&&alive,open=e.mode==='recover'&&alive;
    c.save();if(!alive)c.globalAlpha=e.defeat/.65;this.glow(e.x,y,boss?90:48,(open?'#baf1b5':color)+'33');c.restore();
    if(windup){
-    const progress=1-e.timer/(e.windup||combatProfile(e.kind,e.hp<=4).windup);
+    const progress=1-e.timer/(e.windup||this.enemyProfile(e).windup);
     c.save();c.strokeStyle='#ffe0a7';c.lineWidth=2;c.setLineDash([6,7]);c.globalAlpha=.75;
     if(e.kind==='charger'){
      c.fillStyle='#ffc77822';c.fillRect(e.direction>0?e.x:e.x-240,y-24,240,48);c.strokeRect(e.direction>0?e.x:e.x-240,y-24,240,48);
      for(let n=1;n<=3;n++){const x=e.x+e.direction*n*65;c.beginPath();c.moveTo(x-e.direction*8,y-8);c.lineTo(x,y);c.lineTo(x-e.direction*8,y+8);c.stroke()}
     }else{
-     const angle=Math.atan2(e.aimY-e.y,e.aimX-e.x),profile=combatProfile(e.kind,boss&&e.hp<=4);
+     const angle=Math.atan2(e.aimY-e.y,e.aimX-e.x),profile=this.enemyProfile(e);
      for(const offset of profile.spread){c.beginPath();c.moveTo(e.x,e.y);c.lineTo(e.x+Math.cos(angle+offset)*280,e.y+Math.sin(angle+offset)*280);c.strokeStyle='#072729dd';c.lineWidth=6;c.stroke();c.strokeStyle='#ffe0a7';c.lineWidth=2;c.stroke()}
     }
     c.setLineDash([]);c.globalAlpha=1;c.strokeStyle='#132c2bcc';c.lineWidth=5;c.beginPath();c.arc(e.x,y,radius+13,0,Math.PI*2);c.stroke();c.strokeStyle='#ffe0a7';c.beginPath();c.arc(e.x,y,radius+13,-Math.PI/2,-Math.PI/2+Math.PI*2*Math.max(0,progress));c.stroke();c.restore();
@@ -352,7 +367,7 @@ export class Game {
  private toast(message:string){this.state.message=message;this.messageUntil=this.elapsed+5.5;this.publish()}
  private publish(){this.state.controller=!!this.activePad;this.state.combo=this.comboWindow>0?this.combo:0;const boss=this.world[this.state.room].enemies.find(e=>e.kind==='keeper'&&e.hp>0);this.state.bossHealth=boss&&Math.abs(boss.x-this.player.x)<750?boss.hp:null;this.state.bossIntent=!boss?'':boss.mode==='recover'?'OPEN · STRIKE NOW':boss.mode==='windup'?(boss.hp<=4?'WIDE FAN · JUMP, DASH OR PARRY':'LIGHT FAN · JUMP, DASH OR PARRY'):'GUARDED · WAIT FOR ITS ATTACK';this.state.canTravel=this.started&&this.atSunwell()&&!this.state.won;this.onUpdate({...this.state,seeds:[...this.state.seeds],visited:[...this.state.visited],shrines:[...this.state.shrines]})}
  private burst(x:number,y:number,n:number,color:string){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=30+Math.random()*190,l=.3+Math.random()*.65;this.particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:l,max:l,color,r:1+Math.random()*4})}}
- private tone(freq:number,duration:number,type:OscillatorType='sine',volume=.04){if(!this.audio||this.mute||this.audio.state!=='running')return;const o=this.audio.createOscillator(),g=this.audio.createGain(),t=this.audio.currentTime;o.type=type;o.frequency.setValueAtTime(freq,t);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(volume,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+duration);o.connect(g);g.connect(this.audio.destination);o.start(t);o.stop(t+duration+.03)}
+ private tone(freq:number,duration:number,type:OscillatorType='sine',volume=.04,channel:'effects'|'music'='effects'){if(!this.audio||this.mute||this.audio.state!=='running')return;const o=this.audio.createOscillator(),g=this.audio.createGain(),t=this.audio.currentTime;o.type=type;o.frequency.setValueAtTime(freq,t);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(volume,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+duration);o.connect(g);g.connect((channel==='music'?this.musicBus:this.effectsBus)??this.audio.destination);o.start(t);o.stop(t+duration+.03)}
  private chime(){[523,659,784,1046].forEach((f,i)=>{setTimeout(()=>{if(!this.stopped)this.tone(f,.55,'sine',.05)},i*110)})}
  private glow(x:number,y:number,r:number,color:string){const c=this.ctx,g=c.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,color);g.addColorStop(1,'transparent');c.fillStyle=g;c.fillRect(x-r,y-r,r*2,r*2)}
  private label(text:string,x:number,y:number,color='#f8e8b8',size=15){const c=this.ctx;c.font=`${size}px Georgia`;c.textAlign='center';c.fillStyle='rgba(3,24,22,.72)';const w=c.measureText(text).width+24;c.beginPath();c.roundRect(x-w/2,y-17,w,28,5);c.fill();c.fillStyle=color;c.fillText(text,x,y+2)}

@@ -7,7 +7,7 @@ import type { Snapshot } from './game';
 const positions=[[100,255],[300,255],[500,255],[300,75],[100,75],[500,75]];
 const passages=worldRegions.flatMap(region=>region.doors.filter(d=>region.id<d.to).map(d=>({from:region.id,to:d.to,needs:d.needs??worldRegions[d.to].doors.find(back=>back.to===region.id)?.needs})));
 
-export function WorldMap({state,onTravel}:{state:Snapshot;onTravel:(room:number)=>void}){
+export function WorldMap({state,onTravel,interactKey="E"}:{state:Snapshot;onTravel:(room:number)=>void;interactKey?:string}){
  const [selected,setSelected]=useState(state.room);
  const objective=journeyObjective(state),region=worldRegions[selected];
  const known=(id:number)=>state.visited.includes(id)||worldRegions.some(r=>state.visited.includes(r.id)&&r.doors.some(d=>d.to===id));
@@ -28,7 +28,7 @@ export function WorldMap({state,onTravel}:{state:Snapshot;onTravel:(room:number)
    {revealed?<><ul className="map-connections">{region.doors.map(door=><li key={door.to}><Chevron/><span>{worldRegions[door.to].name}</span><small>{door.needs&&!state[door.needs]?'Sky Feather required':door.needs?'Sky Feather path':'Open passage'}</small></li>)}</ul>
     {lit?<button className="travel-button" disabled={!state.canTravel||selected===state.room||state.won} onClick={()=>onTravel(selected)}><Flame size={16}/>{selected===state.room?'Your current Sunwell':`Travel to ${region.name}`}</button>:<p className="map-note">Rest at this area’s Sunwell to unlock a return journey.</p>}
    </>:<p className="map-note">Explore a connecting passage to reveal this clearing.</p>}
-   <p className="travel-hint">{state.won?'The forest is restored. A new journey awaits.':state.canTravel?'You are at a lit Sunwell. Select another lit Sunwell to travel.':'Travel begins at a lit Sunwell. Rest with E or Y, then open the map beside it.'}</p>
+   <p className="travel-hint">{state.won?'The forest is restored. A new journey awaits.':state.canTravel?'You are at a lit Sunwell. Select another lit Sunwell to travel.':`Travel begins at a lit Sunwell. Rest with ${interactKey} or Y, then open the map beside it.`}</p>
   </section>
  </div>;
 }

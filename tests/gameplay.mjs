@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import ts from 'typescript';
 const source=fs.readFileSync(new URL('../app/game.ts',import.meta.url),'utf8');
-const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+const compile=code=>ts.transpileModule(code,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+const preferencesURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/preferences.ts',import.meta.url),'utf8'))).toString('base64');
+const prefs=await import(preferencesURL);
+const compiled=compile(source).replace("'./preferences'",JSON.stringify(preferencesURL));
 const storage=new Map();globalThis.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
 const noop=()=>{};globalThis.window={devicePixelRatio:1,addEventListener:noop,removeEventListener:noop};globalThis.document={hidden:false,addEventListener:noop,removeEventListener:noop};
 globalThis.Image=class {complete=false;naturalWidth=0;set src(v){queueMicrotask(()=>this.onload?.())}};
@@ -183,6 +186,87 @@ check('Sentry warnings commit to the original target rather than tracking a dodg
 });
 check('Contact danger returns after a regular creature finishes recovering',()=>{
  game.start();place(0,1510);const e=game.world[0].enemies[0];e.x=e.home=1510;e.range=0;e.mode='recover';e.timer=.05;game.updateEnemies(.03);assert.equal(game.state.health,5);game.updateEnemies(.03);assert.equal(game.state.health,4);
+});
+
+
+check('Preferences round-trip independently of the adventure save',()=>{
+ const progress=storage.get('luma-sunseed-v1');const value={...prefs.defaultPreferences(),muted:true,musicVolume:.2,effectsVolume:.4,assist:true,motion:'reduced',bindings:{...prefs.defaultBindings,jump:'KeyF'}};
+ assert.equal(prefs.savePreferences(value),true);assert.deepEqual(prefs.readPreferences(),value);assert.equal(storage.get('luma-sunseed-v1'),progress);
+ storage.set('luma-preferences-v1','{oops');assert.deepEqual(prefs.readPreferences(),prefs.defaultPreferences());
+});
+check('Malformed settings cannot create conflicting keys or invalid audio values',()=>{
+ const value=prefs.normalizePreferences({...prefs.defaultPreferences(),musicVolume:9,effectsVolume:NaN,bindings:{...prefs.defaultBindings,jump:'KeyA'}});
+ assert.equal(value.musicVolume,1);assert.equal(value.effectsVolume,.85);assert.deepEqual(value.bindings,prefs.defaultBindings);
+ assert.deepEqual(prefs.normalizePreferences({version:2,muted:true}),prefs.defaultPreferences());
+});
+check('Rebinding rejects conflicts and reserved keys, and gives primary bindings precedence',()=>{
+ assert.ok(prefs.rebindControl(prefs.defaultBindings,'jump','KeyA').error);assert.ok(prefs.rebindControl(prefs.defaultBindings,'jump','Escape').error);assert.ok(prefs.rebindControl(prefs.defaultBindings,'jump','Tab').error);
+ const bindings={...prefs.defaultBindings,right:'ArrowLeft',jump:'KeyF'};
+ assert.equal(prefs.keyboardAction('ArrowLeft',bindings),'right');assert.equal(prefs.keyboardAction('KeyD',bindings),undefined);assert.equal(prefs.keyboardAction('Space',bindings),undefined);assert.equal(prefs.keyboardAction('KeyW',bindings),undefined);assert.equal(prefs.keyboardAction('KeyF',bindings),'jump');assert.equal(prefs.keyboardAction('KeyX',bindings),'strike');
+});
+const keyboard=(code,extra={})=>({code,preventDefault:noop,...extra});
+check('Actual remapped keyboard input moves and jumps; the former jump key is inactive',()=>{
+ game.setPreferences({...prefs.defaultPreferences(),bindings:{...prefs.defaultBindings,right:'KeyL',jump:'KeyF'}});game.start();place(0,300);
+ game.keydown(keyboard('KeyD'));run(.1);assert.equal(game.player.x,300);
+ game.keydown(keyboard('KeyL'));run(.15);game.keyup(keyboard('KeyL'));assert.ok(game.player.x>320);
+ game.keydown(keyboard('Space'));run(.05);assert.equal(game.player.y,705);
+ game.keydown(keyboard('KeyF'));run(.04);assert.ok(game.player.vy<0);game.keyup(keyboard('KeyF'));
+});
+check('Releasing one of two physical aliases does not cancel the held direction',()=>{
+ game.setPreferences(prefs.defaultPreferences());game.start();place(0,300);game.keydown(keyboard('KeyD'));game.keydown(keyboard('ArrowRight'));game.keyup(keyboard('KeyD'));assert.equal(game.keys.has('KeyD'),true);game.keyup(keyboard('ArrowRight'));assert.equal(game.keys.has('KeyD'),false);
+});
+check('Changing bindings clears held and queued input, and form controls never move Luma',()=>{
+ game.keydown(keyboard('KeyD'));game.setPreferences({...prefs.defaultPreferences(),bindings:{...prefs.defaultBindings,right:'KeyL'}});assert.equal(game.keys.size,0);assert.equal(game.keyboardHeld.size,0);
+ game.keydown(keyboard('KeyL',{target:{closest:()=>({})}}));assert.equal(game.keys.size,0);
+ game.keydown(keyboard('KeyL',{defaultPrevented:true}));assert.equal(game.keys.size,0);game.keydown(keyboard('KeyL',{ctrlKey:true}));assert.equal(game.keys.size,0);game.setPreferences(prefs.defaultPreferences());
+});
+check('Remapped strike, dash, and interaction retain real engine behavior',()=>{
+ game.setPreferences({...prefs.defaultPreferences(),bindings:{...prefs.defaultBindings,strike:'KeyV',dash:'KeyC',interact:'KeyR'}});game.start();place(0,350);game.state.dash=true;
+ game.keydown(keyboard('KeyV'));run(.01);game.keyup(keyboard('KeyV'));assert.ok(game.attack>0);
+ game.keydown(keyboard('KeyC'));run(.01);game.keyup(keyboard('KeyC'));assert.ok(game.dashTime>0);
+ place(1,310);game.keydown(keyboard('KeyR'));run(.01);game.keyup(keyboard('KeyR'));assert.ok(game.state.shrines.includes(1));game.setPreferences(prefs.defaultPreferences());
+});
+check('Gentle Journey forgives falls and extends damage grace without removing enemy damage',()=>{
+ game.setPreferences({...prefs.defaultPreferences(),assist:true});game.start();place(0,350);game.safe={x:350,y:705};game.player.y=1000;game.hurt(true);assert.equal(game.state.health,5);assert.equal(game.player.y,705);
+ game.invincible=0;game.hurt(false);assert.equal(game.state.health,4);assert.equal(game.invincible,2.4);game.hurt(false);assert.equal(game.state.health,4);
+ game.setPreferences(prefs.defaultPreferences());game.invincible=0;game.hurt(true);assert.equal(game.state.health,3);assert.equal(game.invincible,1.6);
+});
+check('Gentle Journey extends warnings and Keeper recovery while slowing projectiles',()=>{
+ game.setPreferences({...prefs.defaultPreferences(),assist:true});game.start();place(5,1700,400);game.invincible=100;const e=game.world[5].enemies[2];e.x=e.home;e.range=0;e.timer=0;
+ game.updateEnemies(.01);assert.equal(e.windup,1.2*1.45);game.updateEnemies(1.21);assert.equal(e.mode,'windup');assert.equal(game.projectiles.length,0);game.updateEnemies(.54);assert.equal(e.mode,'recover');assert.equal(e.timer,1.25*1.4);assert.equal(game.projectiles.length,3);assert.ok(Math.abs(Math.hypot(game.projectiles[0].vx,game.projectiles[0].vy)-205*.8)<.001);
+ game.setPreferences(prefs.defaultPreferences());
+});
+check('Vibration preference and reduced motion suppress controller rumble',()=>{
+ let count=0;game.activePad={vibrationActuator:{playEffect:()=>{count++;return Promise.resolve()}}};game.setPreferences({...prefs.defaultPreferences(),rumble:false});game.rumble(.2,50);assert.equal(count,0);
+ game.setPreferences({...prefs.defaultPreferences(),motion:'reduced'});game.shake=9;game.motionChanged();game.rumble(.2,50);assert.equal(count,0);assert.equal(game.shake,0);
+ game.setPreferences(prefs.defaultPreferences());game.rumble(.2,50);assert.equal(count,1);game.activePad=null;
+});
+check('Separate audio buses apply saved volumes and route melody apart from effects',()=>{
+ const gains=[],oscillators=[];globalThis.AudioContext=class{
+  state='suspended';currentTime=0;destination={};resume(){this.state='running';return Promise.resolve()}suspend(){this.state='suspended';return Promise.resolve()}close(){this.state='closed';return Promise.resolve()}
+  createGain(){const node={gain:{setTargetAtTime:v=>{node.volume=v},setValueAtTime:noop,linearRampToValueAtTime:noop,exponentialRampToValueAtTime:noop},connect:target=>{node.target=target}};gains.push(node);return node}
+  createOscillator(){const node={frequency:{setValueAtTime:noop},connect:noop,start:noop,stop:noop};oscillators.push(node);return node}
+ };
+ game.setPreferences({...prefs.defaultPreferences(),musicVolume:.25,effectsVolume:.7});game.start();assert.equal(game.musicBus.volume,.25);assert.equal(game.effectsBus.volume,.7);
+ game.tone(440,.1);assert.equal(gains.at(-1).target,game.effectsBus);game.tone(330,.2,'sine',.02,'music');assert.equal(gains.at(-1).target,game.musicBus);
+ game.setPreferences({...prefs.defaultPreferences(),muted:true});const count=oscillators.length;game.tone(440,.1);assert.equal(oscillators.length,count);assert.equal(game.audio.state,'suspended');game.start();assert.equal(game.audio.state,'suspended');assert.equal(game.getPreferences().muted,true);
+ game.setPreferences(prefs.defaultPreferences());assert.equal(game.audio.state,'running');
+});
+check('Stored preferences survive a new journey, and controller menus can adjust settings',()=>{
+ const value={...prefs.defaultPreferences(),assist:true,muted:true};prefs.savePreferences(value);
+ const second=new Game({getContext:()=>context,getBoundingClientRect:()=>({width:1440,height:810})},noop);assert.equal(second.getPreferences().assist,true);second.start();assert.equal(second.getPreferences().muted,true);assert.equal(second.state.dash,false);second.destroy();
+ const pad={mapping:'standard',axes:[.8,0],buttons:[]};assert.ok(gamepadButtons(pad).menus.has('increase'));pad.axes=[-.8,0];assert.ok(gamepadButtons(pad).menus.has('decrease'));
+ storage.delete('luma-preferences-v1');
+});
+check('Storage failures leave valid settings available for the current session',()=>{
+ const original=globalThis.localStorage;globalThis.localStorage={getItem:()=>{throw Error('blocked')},setItem:()=>{throw Error('blocked')}};
+ assert.deepEqual(prefs.readPreferences(),prefs.defaultPreferences());assert.equal(prefs.savePreferences(prefs.defaultPreferences()),false);globalThis.localStorage=original;
+});
+
+check('System motion changes update the engine and remove their listener on destruction',()=>{
+ let listener,removed=false;const query={matches:true,addEventListener:(name,fn)=>{listener=fn},removeEventListener:(name,fn)=>{removed=fn===listener}};window.matchMedia=()=>query;
+ const second=new Game({getContext:()=>context,getBoundingClientRect:()=>({width:1440,height:810})},noop);assert.equal(second.reducedMotion,true);query.matches=false;listener();assert.equal(second.reducedMotion,false);
+ second.setPreferences({...prefs.defaultPreferences(),motion:'reduced'});assert.equal(second.reducedMotion,true);second.destroy();assert.equal(removed,true);delete window.matchMedia;
 });
 
 game.destroy();console.log(`\n${tests} gameplay checks passed.`);
