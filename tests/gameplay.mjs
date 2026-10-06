@@ -7,7 +7,9 @@ const preferencesURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readF
 const prefs=await import(preferencesURL);
 const campaignURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/campaign.ts',import.meta.url),'utf8'))).toString('base64');
 const campaign=await import(campaignURL);
-const compiled=compile(source).replaceAll("'./campaign'",JSON.stringify(campaignURL)).replace("'./preferences'",JSON.stringify(preferencesURL));
+const atlasURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/art-atlas.ts',import.meta.url),'utf8'))).toString('base64');
+const visualsURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/combat-visuals.ts',import.meta.url),'utf8')).replace("'./art-atlas'",JSON.stringify(atlasURL))).toString('base64');
+const compiled=compile(source).replace("'./combat-visuals'",JSON.stringify(visualsURL)).replaceAll("'./campaign'",JSON.stringify(campaignURL)).replace("'./preferences'",JSON.stringify(preferencesURL));
 const storage=new Map();globalThis.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
 const noop=()=>{};globalThis.window={devicePixelRatio:1,addEventListener:noop,removeEventListener:noop};globalThis.document={hidden:false,addEventListener:noop,removeEventListener:noop};
 globalThis.Image=class {complete=false;naturalWidth=0;set src(v){queueMicrotask(()=>this.onload?.())}};
@@ -18,6 +20,7 @@ const {Game,gamepadButtons,journeyRoute,journeyObjective,worldRegions,memoryBloo
 const game=new Game({getContext:()=>context,getBoundingClientRect:()=>({width:1440,height:810})},noop);await game.ready;
 const run=(seconds)=>{for(let i=0;i<Math.round(seconds*120);i++){game.elapsed+=1/120;game.update(1/120)}};
 const tap=k=>{game.input(k,true);run(1/120);game.input(k,false)};
+const strike=()=>{tap('KeyJ');run(.065)};
 const place=(room,x,y=705)=>{game.encounter=null;game.bossHazards=[];game.state.room=room;game.state.roomName=game.world[room].name;game.player={x,y,vx:0,vy:0,face:1,grounded:true};game.coyote=.12;game.invincible=0;game.dashCooldown=0;game.dashTime=0;game.usedDouble=false;game.hitStop=0;game.strikeBuffer=0;game.knockback=0;game.comboWindow=0;game.attack=0;game.attackCooldown=0;game.padKeys.clear();game.padPressed.clear();game.projectiles=[];game.keys.clear();game.pressed.clear()};
 const unlock=stage=>{game.state.bosses=Array.from({length:stage},(_,i)=>i)};
 const prepare=stage=>{unlock(stage);game.state.beacons=[0,1,2].map(p=>`${stage}:${p}`);for(const e of game.world[campaign.stageRooms(stage)[2]].enemies)e.hp=0};
@@ -36,7 +39,7 @@ check('Three beacons and a cleared gauntlet are required before arena entry',()=
  for(const e of game.world[7].enemies)e.hp=0;tap('KeyE');assert.equal(game.state.room,8);
 });
 
-check('Combat defeats a wisp and yields light',()=>{place(0,1500);const e=game.world[0].enemies[0];e.x=1550;e.home=1550;e.range=0;e.y=660;const light=game.state.light;tap('KeyJ');run(.33);tap('KeyJ');assert.equal(e.hp,0);assert.ok(game.state.light>=light+3)});
+check('Combat defeats a wisp and yields light',()=>{place(0,1500);const e=game.world[0].enemies[0];e.x=1550;e.home=1550;e.range=0;e.y=660;const light=game.state.light;strike();run(.33);strike();assert.equal(e.hp,0);assert.ok(game.state.light>=light+3)});
 check('Damage has an invulnerability grace period',()=>{place(0,2000);game.hurt(false);const hp=game.state.health;game.hurt(false);assert.equal(game.state.health,hp)});
 check('Only all six guardian victories complete the campaign and restore three sunseeds',()=>{
  game.start();game.state.dash=true;game.state.doubleJump=true;
@@ -73,11 +76,11 @@ check('Boss patterns change at half health and Solwarden has a third phase',()=>
 });
 
 check('Light strikes disperse incoming projectiles',()=>{
- place(0,350);game.projectiles=[{x:410,y:670,vx:-180,vy:0,life:2,radius:8}];tap('KeyJ');assert.equal(game.projectiles.length,0);
+ place(0,350);game.projectiles=[{x:410,y:670,vx:-180,vy:0,life:2,radius:8}];strike();assert.equal(game.projectiles.length,0);
 });
 check('Third combo strike is stronger and separate swings cannot hit twice',()=>{
  place(0,1460);const e=game.world[0].enemies[0];e.hp=8;e.home=1520;e.range=0;e.x=1520;game.invincible=10;
- tap('KeyJ');const first=e.hp;run(.1);assert.equal(e.hp,first);run(.24);tap('KeyJ');run(.34);tap('KeyJ');assert.equal(game.combo,3);assert.equal(e.hp,4);
+ strike();const first=e.hp;run(.1);assert.equal(e.hp,first);run(.24);strike();run(.34);strike();assert.equal(game.combo,3);assert.equal(e.hp,4);
 });
 check('Defeated enemies stay defeated when loading old-compatible saves',()=>{
  game.defeated.add('0-0');game.save();game.start(true);assert.equal(game.world[0].enemies[0].hp,0);
@@ -164,20 +167,20 @@ check('Passage arrival resets combat feedback without inheriting the previous bo
 
 check('A slightly early strike queues the next combo without auto-attacking',()=>{
  game.start();place(0,1450);const e=game.world[0].enemies[0];e.hp=8;e.x=e.home=1510;e.range=0;
- tap('KeyJ');assert.equal(e.hp,7);run(.22);tap('KeyJ');assert.equal(e.hp,7);run(.15);assert.equal(e.hp,6);assert.equal(game.state.combo,2);run(.9);assert.equal(e.hp,6);
+ strike();assert.equal(e.hp,7);run(.22);strike();assert.equal(e.hp,7);run(.15);assert.equal(e.hp,6);assert.equal(game.state.combo,2);run(.9);assert.equal(e.hp,6);
 });
 check('Pausing clears queued attacks before resuming',()=>{
  game.start();place(0,1450);const e=game.world[0].enemies[0];e.hp=8;e.x=e.home=1510;e.range=0;
- tap('KeyJ');run(.22);tap('KeyJ');game.setPaused(true);game.setPaused(false);run(.4);assert.equal(e.hp,7);
+ strike();run(.15);tap('KeyJ');game.setPaused(true);game.setPaused(false);run(.4);assert.equal(e.hp,7);
 });
 check('Strikes interrupt a sentry wind-up and create a safe stun window',()=>{
- game.start();place(1,1500);const e=game.world[1].enemies[1];e.x=e.home=1560;e.range=0;e.mode='windup';e.timer=.03;
- tap('KeyJ');assert.equal(e.hp,1);assert.equal(e.mode,'recover');game.player.x=e.x;run(.3);assert.equal(game.projectiles.length,0);assert.equal(game.state.health,5);
+ game.start();place(1,1500);const e=game.world[1].enemies[1];e.x=e.home=1560;e.range=0;e.mode='windup';e.timer=.12;
+ strike();assert.equal(e.hp,1);assert.equal(e.mode,'recover');game.player.x=e.x;run(.3);assert.equal(game.projectiles.length,0);assert.equal(game.state.health,5);
 });
 check('Campaign guardians guard preparation but take combo damage during recovery',()=>{
  game.start();prepare(0);place(8,1400);const e=game.world[8].enemies[0];e.x=e.home=1500;e.timer=0;
- run(.6);tap('KeyJ');assert.equal(e.hp,18);assert.ok(game.combatTexts.some(t=>t.text==='GUARDED'));
- e.mode='recover';e.timer=2;game.attackCooldown=0;game.comboWindow=0;tap('KeyJ');assert.equal(e.hp,17);run(.34);tap('KeyJ');run(.34);tap('KeyJ');assert.equal(e.hp,14);
+ run(.6);strike();assert.equal(e.hp,18);assert.ok(game.combatTexts.some(t=>t.text==='GUARDED'));
+ e.mode='recover';e.timer=2;game.attackCooldown=0;game.comboWindow=0;strike();assert.equal(e.hp,17);run(.34);strike();run(.34);strike();assert.equal(e.hp,14);
 });
 
 check('Every guardian can be defeated through real attack and recovery cycles',()=>{
@@ -186,7 +189,7 @@ check('Every guardian can be defeated through real attack and recovery cycles',(
   // Isolate counterplay from dodging; hazards and damage are checked separately.
   game.invincible=1000;let cycles=0;
   while(e.hp>0&&cycles++<20){let elapsed=0;while(e.mode!=='recover'&&elapsed<7){run(1/120);elapsed+=1/120}assert.equal(e.mode,'recover');game.player.x=e.x-90;game.player.y=705;game.player.face=1;game.player.vx=0;game.comboWindow=0;game.attackCooldown=0;
-   for(let hit=0;hit<3&&e.hp>0;hit++){tap('KeyJ');run(.34)}
+   for(let hit=0;hit<3&&e.hp>0;hit++){strike();run(.34)}
    if(e.hp>0)while(e.mode==='recover')run(1/120);
   }
   assert.equal(e.hp,0,`Guardian ${stage} complete`);assert.ok(game.state.bosses.includes(stage));assert.equal(game.projectiles.length,0);assert.equal(game.bossHazards.length,0);assert.equal(game.state.health,5);assert.ok(cycles>=4,'A guardian requires several counter windows');
@@ -199,11 +202,11 @@ check('Projectiles hit terrain, including when a long step crosses an entire led
 });
 check('Awakening a creature grants its light only once and removes contact damage',()=>{
  game.start();place(0,1450);const e=game.world[0].enemies[0];e.x=e.home=1510;e.range=0;const light=game.state.light;
- tap('KeyJ');run(.34);tap('KeyJ');assert.equal(e.hp,0);const reward=game.state.light;assert.ok(reward>=light+3);game.player.x=e.x;run(.34);tap('KeyJ');assert.equal(game.state.light,reward);assert.equal(game.state.health,5);
+ strike();run(.34);strike();assert.equal(e.hp,0);const reward=game.state.light;assert.ok(reward>=light+3);game.player.x=e.x;run(.34);strike();assert.equal(game.state.light,reward);assert.equal(game.state.health,5);
 });
 
 check('An early press outside the buffer window does not fire a late surprise strike',()=>{
- game.start();place(0,1450);const e=game.world[0].enemies[0];e.hp=8;e.x=e.home=1510;e.range=0;tap('KeyJ');run(.04);tap('KeyJ');run(.5);assert.equal(e.hp,7);
+ game.start();place(0,1450);const e=game.world[0].enemies[0];e.hp=8;e.x=e.home=1510;e.range=0;strike();run(.04);strike();run(.5);assert.equal(e.hp,7);
 });
 check('Sentry warnings commit to the original target rather than tracking a dodge',()=>{
  game.start();place(1,1420);const e=game.world[1].enemies[1];e.x=e.home=1560;e.range=0;e.timer=0;game.updateEnemies(.01);const aim=e.aimX;game.player.x=1750;game.updateEnemies(.96);
@@ -390,8 +393,8 @@ check('An active boss arena seals retreat and cannot open a Sunwell menu',()=>{
  game.start();prepare(0);place(8,700);run(.7);assert.equal(game.encounter,8);game.player.x=400;run(.01);assert.ok(game.player.x>=590);assert.equal(game.openSunwell(),false);
 });
 check('Boss victories heal, save a checkpoint, reward once, and persist through reload',()=>{
- game.start();prepare(0);place(8,1440);const e=game.world[8].enemies[0];e.hp=1;e.mode='recover';e.timer=2;game.state.health=2;const light=game.state.light;tap('KeyJ');assert.equal(e.hp,0);assert.equal(game.state.light,light+40);assert.equal(game.state.health,5);assert.equal(game.checkpoint.room,8);
- run(.4);tap('KeyJ');assert.equal(game.state.light,light+40);game.start(true);assert.equal(game.world[8].enemies[0].hp,0);assert.equal(game.state.room,8);assert.deepEqual(game.state.bosses,[0]);
+ game.start();prepare(0);place(8,1440);const e=game.world[8].enemies[0];e.hp=1;e.mode='recover';e.timer=2;game.state.health=2;const light=game.state.light;strike();assert.equal(e.hp,0);assert.equal(game.state.light,light+40);assert.equal(game.state.health,5);assert.equal(game.checkpoint.room,8);
+ run(.4);strike();assert.equal(game.state.light,light+40);game.start(true);assert.equal(game.world[8].enemies[0].hp,0);assert.equal(game.state.room,8);assert.deepEqual(game.state.bosses,[0]);
 });
 check('Thorns and swinging obstacles cause damage; dash passes safely through hazards',()=>{
  game.start();place(6,1150);game.updateHazards(.01);assert.equal(game.state.health,4);place(6,1150);game.state.health=5;game.dashTime=.15;game.updateHazards(.01);assert.equal(game.state.health,5);
@@ -468,6 +471,39 @@ check('The first guardian is beatable with five hearts, ordinary jumps, and no i
   run(1/120);
  }
  assert.equal(e.hp,0,`Briarhorn should be beatable; HP ${e.hp}, Luma ${game.state.health}, room ${game.state.room}`);assert.ok(game.state.bosses.includes(0));assert.equal(game.state.dash,false);assert.equal(game.state.doubleJump,false);
+});
+
+check('Melee damage follows anticipation and ends before visual recovery',()=>{
+ game.start();place(0,1450);game.invincible=10;
+ const e=game.world[0].enemies[0];e.hp=8;e.x=e.home=1510;e.y=660;e.range=0;
+ tap('KeyJ');assert.equal(e.hp,8,'No damage on the anticipation pose');run(.025);assert.equal(e.hp,8);run(.04);assert.equal(e.hp,7);
+ game.hitStop=0;game.attack=.055;game.swingHits.clear();const hp=e.hp;run(.025);assert.equal(e.hp,hp,'The recovery pose cannot deal another hit');
+});
+check('Dash afterimages and impact effects are bounded, reduced-motion aware, and cleared on travel',()=>{
+ game.start();place(0,300);const v=game.visuals;
+ for(let i=0;i<100;i++){v.emit('hit',400,600);v.update(.01,game.player,true,false)}
+ assert.ok(v.impacts.length<=32);assert.ok(v.ghosts.length<=6);assert.ok(v.ghosts.length>0);
+ v.update(.01,game.player,true,true);assert.equal(v.ghosts.length,0);game.settlePlayer(230);assert.equal(v.impacts.length,0);assert.equal(v.ghosts.length,0);
+});
+const {CombatVisuals}=await import(visualsURL);
+check('Painted sprite poses use valid source rectangles across combos, movement, creatures, and bosses',()=>{
+ const v=new CombatVisuals(),draws=[];
+ const recording=new Proxy({...context,drawImage:(...args)=>draws.push(args),globalAlpha:1},{get:(o,k)=>o[k]??noop,set:(o,k,value)=>{o[k]=value;return true}});
+ v.combat.naturalWidth=1536;v.movement.naturalWidth=1254;v.creatures.naturalWidth=2048;v.bosses.naturalWidth=1920;
+ for(let combo=1;combo<=3;combo++)for(const time of [.29,.21,.14,.04])assert.equal(v.hero(recording,{x:0,y:0,vx:0,vy:0,face:1,grounded:true},time,combo,false,0,false),true);
+ for(const [grounded,vy,dash] of [[true,0,false],[false,-300,false],[false,300,false],[false,0,true]])v.hero(recording,{x:0,y:0,vx:0,vy,face:1,grounded},0,0,dash,0,false);
+ for(const kind of ['drifter','charger','sentry','keeper'])for(const mode of ['patrol','windup','attack','recover'])v.enemy(recording,{x:0,y:0,kind,hp:2,hit:0,phase:0,mode,timer:.5,windup:1,direction:1,defeat:0},1,false);
+ for(let boss=0;boss<6;boss++)v.enemy(recording,{x:0,y:0,kind:'keeper',boss,hp:18,hit:0,phase:0,mode:'attack',timer:.5,windup:1,direction:1,defeat:0},1,false);
+ for(const [image,sx,sy,sw,sh,dx,dy,dw,dh] of draws){const height=image===v.combat?1024:image===v.bosses?1280:image.naturalWidth;assert.ok([sx,sy,sw,sh,dx,dy,dw,dh].every(Number.isFinite));assert.ok(sx>=0&&sy>=0&&sw>0&&sh>0&&sx+sw<=image.naturalWidth+.001&&sy+sh<=height+.001);}
+ assert.ok(draws.length>40);
+});
+const WorkingImage=globalThis.Image;
+globalThis.Image=class{naturalWidth=0;set src(v){queueMicrotask(()=>this.onerror?.())}};
+const missingArt=new CombatVisuals();await missingArt.ready;globalThis.Image=WorkingImage;
+check('Failed art downloads resolve safely and retain the original renderer fallback',()=>{
+ assert.equal(missingArt.hero(context,game.player,.15,1,false,0,false),false);
+ assert.equal(missingArt.enemy(context,game.world[0].enemies[0],0,false),false);
+ assert.equal(missingArt.projectile(context,{x:0,y:0,vx:1,vy:0,radius:8},0),false);
 });
 
 game.destroy();console.log(`\n${tests} gameplay checks passed.`);

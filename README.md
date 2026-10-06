@@ -60,6 +60,14 @@ Touch controls appear on touch devices. The toolbar offers help, saved mute, and
 - Resting also opens the blessings menu. Heartwood costs 20 light for a sixth heart and 35 for a seventh. Glowkeeper costs 25 light and extends mote collection. Purchases require enough light and cannot be repeated after completion.
 - Beacons grant 10 light once. Abilities, discoveries, blessings, cleared creatures, beacons, and guardian victories persist through death and reload. Unfinished guardian fights restart at full health.
 
+## Combat artwork and animation
+
+Luma now uses twelve painted blade-combo poses, with separate idle, jumping, falling, and dash poses alongside the eight-frame run cycle. Each combo has anticipation, a visible release, and recovery; damage begins 45ms into the swing and ends before the recovery pose. Horizontal slashes, rising cuts, and the overhead finisher have different sunlight trails.
+
+Painted moths, beetles, and lantern flowers use attack-state poses; all six guardians have distinct detailed artwork with animated stance and wing movement. Contact sparks, guard impacts, mint parries, dash afterimages, landing dust, luminous projectile tails, and boss spell pillars make combat events visible. Reduced motion suppresses extra trails and secondary movement while keeping essential combat cues.
+
+Effects adapt eight textures from [Kenney’s CC0 Particle Pack](https://kenney.nl/assets/particle-pack). Character and creature artwork was generated specifically for Luma. [Asset credits and license](public/art/CREDITS.md) and the [generation prompt set](docs/art/prompts.md) document their origin. All runtime art is local, compressed WebP; the original renderer remains available if an optional art download fails.
+
 ## Comfort and settings
 
 Music and game sounds have separate volume controls, with saved mute and optional controller vibration. Reduced motion follows the device preference or can be set explicitly; it removes camera shake and vibration and reduces interface animation.
@@ -79,12 +87,13 @@ Starting a new journey resets adventure progress and retains device preferences.
 ## Implementation and verification
 
 - `app/campaign.ts`: stage content, authored trials, shared gate rules, and boss attack profiles used by both behavior and warnings.
+- `app/combat-visuals.ts` and `app/art-atlas.ts`: shared swing timing, sprite poses, anatomical pivots, and bounded combat effects.
 - `app/game.ts`: fixed-step 120 Hz physics, enemies, hazards, moving platforms, rendering, audio, persistence, and progression.
 - `app/page.tsx`: React interface, guidance, pause menu, and touch input.
 - `app/world-map.tsx`: six-stage campaign map, four-area stage routes, memory clues, and Sunwell travel.
 - `app/preferences.ts`, `app/game-settings.tsx`, and `app/sunwell.tsx`: validated preferences, remapping, settings, and blessing purchases.
 - `public/forest.png`, `public/*.webp`, and guardian images: original generated environment and character artwork, extended with procedural animation and effects.
-- `tests/gameplay.mjs`: 87 deterministic checks with mocked browser APIs. Coverage includes campaign and travel gates, save migration and malformed data, checkpoints, boss attack cycles and rewards, all six guardian counter fights, a first-boss fight with ordinary jumps and five hearts, hazards, moving-platform carry, combat buffering, controller mapping, preferences, audio buses, blessings, and memories. Real movement checks reach every trial beacon and exit and every gauntlet beacon; enemies and hazards are disabled in those geometry checks to isolate reachability.
+- `tests/gameplay.mjs`: 91 deterministic checks with mocked browser APIs. Coverage includes campaign and travel gates, save migration and malformed data, checkpoints, boss attack cycles and rewards, all six guardian counter fights, a first-boss fight with ordinary jumps and five hearts, hazards, moving-platform carry, combat buffering, controller mapping, preferences, audio buses, blessings, and memories. Real movement checks reach every trial beacon and exit and every gauntlet beacon; enemies and hazards are disabled in those geometry checks to isolate reachability.
 
 ```sh
 npm test
@@ -94,7 +103,7 @@ npm run build
 
 GitHub Actions runs gameplay checks, TypeScript checks, and production builds on pushes and pull requests. Work continues directly on `main` as requested.
 
-Browser review covers desktop and narrow-screen layouts, the campaign map, guardian interface, and hazard visuals. Hardware controller, physical touch-device, and audio checks still need real-device playtesting. The expanded content supports a longer adventure, but its completion time has not been measured in a full human playthrough.
+Browser review covers desktop and narrow-screen layouts, the campaign map, guardian interface, and hazard visuals. Additional checks cover the anticipation/recovery damage boundaries, valid sprite crops, reduced-motion effect caps, and missing-art fallback. Hardware controller, physical touch-device, and audio checks still need real-device playtesting. The expanded content supports a longer adventure, but its completion time has not been measured in a full human playthrough.
 
 ## Next development priorities
 
