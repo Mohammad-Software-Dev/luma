@@ -1,3 +1,4 @@
+import { bossActionFrames } from './boss-action-atlas';
 import { creatureFrames, bossFrames } from './art-atlas';
 
 /** One clock drives the painted pose, blade trail, and damage window. */
@@ -10,7 +11,7 @@ export function strikeFrame(remaining: number) {
   const elapsed = strikeTiming.duration - remaining;
   return elapsed < strikeTiming.anticipation ? 0 : elapsed < .105 ? 1 : elapsed < .205 ? 2 : 3;
 }
-type Creature = { x:number;y:number;kind:string;boss?:number;hp:number;hit:number;phase:number;mode:string;timer:number;windup:number;direction:number;defeat:number;pattern?:string };
+type Creature = { x:number;y:number;kind:string;boss?:number;hp:number;hit:number;phase:number;mode:string;timer:number;windup:number;direction:number;defeat:number;pattern?:string;recoil?:number;aimX?:number;aimY?:number;motionDuration?:number;fromX?:number;fromY?:number };
 type Hero = {x:number;y:number;vx:number;vy:number;face:number;grounded:boolean};
 type Impact = {x:number;y:number;life:number;max:number;kind:'hit'|'guard'|'parry'|'land'|'cast'|'awake';power:number;angle:number};
 type Ghost = {x:number;y:number;face:number;life:number};
@@ -22,6 +23,8 @@ export class CombatVisuals {
   private movement = new Image();
   private creatures = new Image();
   private bosses = new Image();
+  private bossActions=[new Image(),new Image()];
+  private bossPoses=new WeakMap<object,{pose:number;previous:number;since:number}>();
   private effects = new Image();
   private tints = new Map<string,HTMLCanvasElement>();
   private impacts: Impact[] = [];
@@ -32,12 +35,13 @@ export class CombatVisuals {
     this.ready = Promise.all([
       this.load(this.combat,'luma-combat'), this.load(this.movement,'luma-movement'),
       this.load(this.creatures,'creatures'), this.load(this.bosses,'bosses'), this.load(this.effects,'effects'),
+      this.load(this.bossActions[0],'boss-actions-a'),this.load(this.bossActions[1],'boss-actions-b'),
     ]).then(()=>{});
   }
   private load(image:HTMLImageElement,name:string) {
     return new Promise<void>(resolve=>{image.onload=()=>resolve();image.onerror=()=>resolve();image.src=`/art/${name}.webp`;});
   }
-  reset(){this.impacts=[];this.ghosts=[];this.trailClock=0;}
+  reset(){this.bossPoses=new WeakMap();this.impacts=[];this.ghosts=[];this.trailClock=0;}
   emit(kind:Impact['kind'],x:number,y:number,power=1,angle=0){
     const max=kind==='awake'?.7:kind==='land'?.36:.28;
     this.impacts.push({kind,x,y,power,angle,max,life:max});
@@ -104,16 +108,34 @@ export class CombatVisuals {
   }
   enemy(c:CanvasRenderingContext2D,e:Creature,t:number,reduced:boolean):boolean{
     const boss=e.boss!==undefined,image=boss?this.bosses:this.creatures;
-    if(!image.naturalWidth)return false;
+    if(!image.naturalWidth&&!(boss&&this.bossActions[Math.floor(e.boss!/3)].naturalWidth))return false;
     const windup=e.mode==='windup',attack=e.mode==='attack',recover=e.mode==='recover',alive=e.hp>0;
     const cycle=reduced?0:Math.sin(t*3+e.phase),progress=windup?clamp(1-e.timer/Math.max(.01,e.windup)):0;
     const y=e.y+(e.kind==='charger'&&!boss?12:cycle*3);
     c.save();c.translate(e.x,y);
     if(!alive){const fade=clamp(e.defeat/.65);c.globalAlpha=fade;if(!reduced){c.translate(0,-(1-fade)*20);c.scale(.8+fade*.2,.8+fade*.2);}}
-    const facing=e.kind==='charger'||e.boss===0||e.boss===2?e.direction:1;c.scale(facing,1);
-    const lean=windup?-.09*progress:attack?.08:recover?.035:0;
-    c.rotate(lean);if(e.hit>0&&alive)c.filter=`brightness(${1+e.hit*1.7}) saturate(.8)`;
-    if(boss){
+    const facing=e.kind==='charger'||boss&&e.boss!==4?e.direction:1;c.scale(facing,1);
+    const recoil=(e.recoil||0)/.24;
+    c.translate(-recoil*7,0);
+    const lean=e.kind==='drifter'?(windup?-.18*progress:attack?.24:recover?-.08:cycle*.03):windup?-.12*progress:attack?.1:recover?.035:0;
+    c.rotate(lean-recoil*.08);if(e.hit>0&&alive)c.filter=`brightness(${1+e.hit*1.7}) saturate(.8)`;
+    if(boss&&this.bossActions[Math.floor(e.boss!/3)].naturalWidth){
+      const image=this.bossActions[Math.floor(e.boss!/3)],row=e.boss!%3;
+      const pose=windup?1:attack?2:recover||e.mode==='stagger'?3:0;
+      let transition=this.bossPoses.get(e);
+      if(!transition){transition={pose,previous:pose,since:t};this.bossPoses.set(e,transition);}
+      if(transition.pose!==pose){transition.previous=transition.pose;transition.pose=pose;transition.since=t;}
+      const blend=reduced?1:clamp((t-transition.since)/.085),scale=e.boss===4?.43:.46;
+      c.translate(0,60);const breathing=reduced?0:Math.sin(t*3+e.phase)*.012;
+      const compression=windup?progress*.1:0;
+      const wingbeat=!reduced&&[1,3,5].includes(e.boss!)&&e.mode==='reposition'?Math.sin(t*11)*.035:0;
+      c.scale(1+compression*.4+breathing+wingbeat,1-compression-breathing-wingbeat);
+      const frames=bossActionFrames[Math.floor(e.boss!/3)];
+      if(blend<1){c.save();c.globalAlpha*=1-blend;this.frame(c,image,frames[row*4+transition.previous],scale);c.restore();}
+      c.save();c.globalAlpha*=blend;this.frame(c,image,frames[row*4+pose],scale);c.restore();
+      if(windup)this.texture(c,6,e.boss===4?0:35,-65,40+progress*25,40+progress*25,0,progress*.55);
+      if(recover)this.texture(c,6,12,-65,28,28,0,.25,'#c6ffd8');
+    }else if(boss){
       const f=bossFrames[e.boss!],[sx,sy,w,h]=f,scale=e.boss===3?.31:e.boss===5?.32:.3;
       const targetW=w*scale,targetH=h*scale;
       c.translate(0,attack&&e.pattern==='slam'?8:windup?-progress*4:0);
@@ -129,9 +151,10 @@ export class CombatVisuals {
       if(recover)this.texture(c,6,0,-5,38,38,0,.35,'#c6ffd8');
     }else{
       const row=e.kind==='drifter'?0:e.kind==='charger'?1:e.kind==='sentry'?2:3;
-      const pose=row===0?(reduced?1:[0,1,2,1][Math.floor(t*8+e.phase)%4]):windup?1:attack||recover&&e.timer>1.8?2:recover?3:0;
+      const pose=row===0?(windup?1:attack?2:recover?3:reduced?1:[0,1,2,1][Math.floor(t*8+e.phase)%4]):windup?1:attack||recover&&e.timer>1.8?2:recover?3:0;
       const scale=[.25,.26,.23,.3][row];
       // A small compression before a charge and leg-driven bounce during the run.
+      if(row===2)c.rotate(windup?progress*.16:recover?-Math.min(1,e.timer/2.25)*.1:Math.sin(t*2)*.025);
       if(row===1){c.translate(0,!reduced&&attack?Math.sin(t*35)*2:0);c.scale(1+progress*.04,1-progress*.08);}
       this.frame(c,image,creatureFrames[row*4+pose],scale);
       if(row===2&&windup)this.texture(c,6,10,-6,22+progress*40,22+progress*40,0,.8);

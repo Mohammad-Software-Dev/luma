@@ -1,3 +1,4 @@
+import { roomComposition, sceneryPlans } from './scenery';
 import { terrainFrames, terrainTops, propFrames } from './environment-atlas';
 
 type Platform = {x:number;y:number;w:number;h:number;moving?:unknown};
@@ -6,9 +7,13 @@ const palettes = [
  ['#224d3a','#70a575','#d9eab2'],['#393a58','#8b90b8','#e3d3f2'],['#4f4939','#a39b6b','#f5e0aa'],
 ];
 // Stable selections: scenery must not flicker or change as moving platforms travel.
-export function terrainVariant(stage:number,room:number,index:number){
- const choices=[[0,1,0,5],[2,0,2,1],[3,5,3,0],[1,0,1,4],[4,5,4,2],[5,3,5,0]][stage];
- return choices[(room+index)%choices.length];
+export function terrainVariant(stage:number,room:number,index:number,p?:Platform){
+ const plan=sceneryPlans[stage];
+ if(!p||p.h>=100)return plan.ground;
+ if(p.moving)return stage===3?1:plan.raised;
+ if(stage===0&&p.y<430)return 1; // Upper glade paths are boughs, low paths are stone.
+ if(stage===4&&p.w>=250)return 5; // Wide sanctuary terraces are the old temple foundations.
+ return plan.raised;
 }
 export function parallaxOffset(camera:number,depth:number,reduced:boolean){return reduced?0:camera*depth;}
 
@@ -16,6 +21,11 @@ export function parallaxOffset(camera:number,depth:number,reduced:boolean){retur
 export class Environment {
  private terrain=new Image();private props=new Image();private foliage=new Image();
  private plants=new Map<number,HTMLCanvasElement>();
+ private platforms=new Map<string,HTMLCanvasElement>();private cachedRoom=-1;
+ private planes:HTMLCanvasElement[]=[];private planeKey='';
+ private makeCanvas(w:number,h:number){if(typeof document.createElement!=='function')return null;const canvas=document.createElement('canvas');canvas.width=Math.ceil(w);canvas.height=Math.ceil(h);return canvas;}
+ destroy(){for(const c of [...this.platforms.values(),...this.planes,...this.plants.values()]){c.width=0;c.height=0;}this.platforms.clear();this.plants.clear();this.planes=[];this.planeKey='';}
+
  readonly ready:Promise<void>;
  constructor(){this.ready=Promise.all([
   this.load(this.terrain,'terrain'),this.load(this.props,'props'),this.load(this.foliage,'foliage'),
@@ -31,30 +41,53 @@ export class Environment {
   if(!atlas){atlas=document.createElement('canvas');atlas.width=1024;atlas.height=512;const a=atlas.getContext('2d')!;a.drawImage(this.foliage,0,0);a.globalCompositeOperation='source-in';const g=a.createLinearGradient(0,0,0,512);g.addColorStop(0,palettes[stage][2]);g.addColorStop(.45,palettes[stage][1]);g.addColorStop(1,palettes[stage][0]);a.fillStyle=g;a.fillRect(0,0,1024,512);this.plants.set(stage,atlas);}
   c.save();c.globalAlpha*=alpha;c.drawImage(atlas,(index%4)*256,Math.floor(index/4)*256,256,256,x-w/2,y-h,w,h);c.restore();
  }
- background(c:CanvasRenderingContext2D,stage:number,camera:number,width:number,t:number,reduced:boolean){
-  // Transparent cutouts form real independently translated depth planes.
-  const prop=stage===2||stage===5?1:stage===4?2:0;
-  for(const layer of [{speed:.2,spacing:720,height:430,base:790,alpha:.28},{speed:.48,spacing:940,height:530,base:835,alpha:.62}]){
-   const shift=parallaxOffset(camera,layer.speed,reduced),start=Math.floor((shift-700)/layer.spacing),end=Math.ceil((shift+width+700)/layer.spacing);
-   c.save();c.globalAlpha=layer.alpha;c.filter='saturate(.65) brightness(.78)';
-   for(let i=start;i<=end;i++){const x=i*layer.spacing-shift+160+(i%2)*95,h=layer.height+(Math.abs(i)%3)*55;this.prop(c,prop,x,layer.base,h*(prop===1?.52:1.15),h,i%2===0);}
-   c.restore();
-  }
-  // A low mist plane separates silhouettes from the playable ledges.
-  const drift=reduced?0:Math.sin(t*.07)*45;
-  c.save();for(let i=0;i<3;i++){const x=i*width/2-parallaxOffset(camera,.1,reduced)+drift;const fog=c.createRadialGradient(x,645,0,x,645,350);fog.addColorStop(0,stage===2?'#e9b6790c':stage===4?'#b4a9e51a':'#c7e8dc19');fog.addColorStop(1,'transparent');c.fillStyle=fog;c.beginPath();c.ellipse(x,645,350,130,0,0,Math.PI*2);c.fill();}c.restore();
+ private buildPlanes(stage:number,part:number){
+  const key=`${stage}:${part}`;if(this.planeKey===key)return;
+  if(!this.props.naturalWidth||!this.foliage.naturalWidth)return;
+  for(const p of this.planes){p.width=0;p.height=0;}this.planes=[];
+  const plan=roomComposition(stage,part);
+  for(let layer=0;layer<3;layer++){
+   const canvas=this.makeCanvas(3200,850);if(!canvas)return;const a=canvas.getContext('2d')!;
+   // Filtering is paid once when entering a room, never on the animation path.
+   if(layer<2){a.filter=layer===0?'saturate(.45) brightness(.78)':'saturate(.72) brightness(.68)';
+    for(const q of layer===0?plan.far:plan.middle)this.prop(a,q.kind,q.x+350,q.base,q.height*(q.kind===1?.52:1.1),q.height,q.flip);
+    a.filter='none';
+   }else{
+    a.filter='brightness(.36) saturate(.7)';
+    // Hanging edge vines form a near plane above the route, not across jumps.
+    if(stage!==2&&stage!==5)for(const x of [180,1630,2760]){a.strokeStyle=palettes[stage][0];a.lineWidth=4;a.beginPath();a.moveTo(x,0);a.bezierCurveTo(x+24,24,x-16,53,x+8,88);a.stroke();a.save();a.translate(x+9,48);a.rotate(Math.PI);this.plant(a,6,0,0,36,60,stage);a.restore();}
+    for(const x of [80,760,1470,2310]){this.plant(a,stage===1?1:stage===2?6:7,x+350,834,150,85,stage);this.plant(a,0,x+425,838,115,65,stage);}
+   }
+   this.planes.push(canvas);
+  }this.planeKey=key;
+ }
+ background(c:CanvasRenderingContext2D,stage:number,camera:number,width:number,t:number,reduced:boolean,room=stage){
+  const part=room<6?0:(room-6)%3+1;this.buildPlanes(stage,part);
+  c.save();
+  for(let i=0;i<2;i++){if(!this.planes[i])continue;c.globalAlpha=i===0?.28:.78;c.drawImage(this.planes[i],-350-parallaxOffset(camera,i===0?.16:.52,reduced),0);}
+  c.restore();
+  const weather=sceneryPlans[stage].weather,shift=parallaxOffset(camera,.32,reduced);
+  // Sparse, stage-specific motion expresses depth without covering the route.
+  c.save();c.globalAlpha=.2;c.strokeStyle=stage===2?'#ffc680':stage===4?'#d8c5ff':'#e2f0c4';c.fillStyle=c.strokeStyle;c.lineWidth=1.4;
+  if(weather==='water'){
+   c.globalAlpha=.18;for(const anchor of [500,1750])for(let i=0;i<9;i++){const x=anchor-shift+(i%3)*12,y=230+(reduced?i*45:(t*90+i*71)%420);c.beginPath();c.moveTo(x,y);c.quadraticCurveTo(x+7,y+25,x+2,y+48);c.stroke();}
+  }else for(let i=0;i<9;i++){const x=160+i*257-shift+(reduced?0:Math.sin(t*.22+i)*28),y=150+(i*89)%490+(reduced?0:Math.sin(t*.4+i*2)*22);if(x<0||x>width)continue;c.beginPath();c.ellipse(x,y,weather==='leaves'?5:2,weather==='leaves'?2:2,reduced?i:t*.35+i,0,Math.PI*2);c.fill();}
+  c.restore();
  }
  foreground(c:CanvasRenderingContext2D,stage:number,camera:number,width:number,t:number,reduced:boolean){
-  const shift=parallaxOffset(camera,1.12,reduced),spacing=170;
-  c.save();c.globalAlpha=.78;c.filter='brightness(.4) saturate(.7)';
-  for(let i=Math.floor((shift-100)/spacing);i<=Math.ceil((shift+width+100)/spacing);i++){
-   const n=Math.abs(i),x=i*spacing-shift,y=831+(n%3)*6,h=65+(n%3)*16,sway=reduced?0:Math.sin(t*.8+i)*3;
-   // Foreground is confined below the walking surface; it cannot conceal hazards.
-   this.plant(c,n%8,x+sway,y,100+(n%3)*35,h,stage);
-  }c.restore();
+  if(!this.planes[2])return;c.save();c.globalAlpha=.9;c.drawImage(this.planes[2],-350-parallaxOffset(camera,1.16,reduced),0);c.restore();
  }
  platform(c:CanvasRenderingContext2D,p:Platform,stage:number,room:number,index:number){
-  const variant=terrainVariant(stage,room,index),[sx,sy,sw,sh]=terrainFrames[variant],top=terrainTops[variant];
+  if(this.cachedRoom!==room){for(const a of this.platforms.values()){a.width=0;a.height=0;}this.platforms.clear();this.cachedRoom=room;}
+  const key=`${index}:${p.w}:${p.h}`;
+  let surface=this.platforms.get(key);
+  if(!surface&&this.terrain.naturalWidth&&this.foliage.naturalWidth&&this.platforms.size<24){
+   const a=this.makeCanvas(p.w+32,380);if(a){this.paintPlatform(a.getContext('2d')!,{...p,x:16,y:110},stage,room,index,terrainVariant(stage,room,index,p));this.platforms.set(key,a);surface=a;}
+  }
+  if(surface){c.drawImage(surface,p.x-16,p.y-110);return;}this.paintPlatform(c,p,stage,room,index);
+ }
+ private paintPlatform(c:CanvasRenderingContext2D,p:Platform,stage:number,room:number,index:number,variant=terrainVariant(stage,room,index,p)){
+  const [sx,sy,sw,sh]=terrainFrames[variant],top=terrainTops[variant];
   if(!this.terrain.naturalWidth){
    c.save();c.fillStyle=palettes[stage][0];c.beginPath();c.moveTo(p.x,p.y);c.lineTo(p.x+p.w,p.y);c.bezierCurveTo(p.x+p.w*.85,p.y+p.h,p.x+p.w*.3,p.y+p.h*1.5,p.x,p.y+15);c.closePath();c.fill();c.restore();return;
   }
@@ -69,10 +102,10 @@ export class Environment {
    for(let x=0;x<p.w;x+=280){const tileW=Math.min(300,p.w-x),scale=300/sw;c.drawImage(this.terrain,sx,sy+top,sw*(tileW/300),sh-top,p.x+x,p.y,tileW,(sh-top)*scale+65);}
    c.restore();
    // Individual crown pieces avoid stretching a single texture across an entire floor.
-   for(let x=0,n=0;x<p.w;x+=320,n++){const w=Math.min(335,p.w-x),v=terrainVariant(stage,room,index+n),f=terrainFrames[v],s=w/f[2];c.drawImage(this.terrain,f[0],f[1],f[2],f[3],p.x+x,p.y-terrainTops[v]*s,w,f[3]*s);}
+   for(let x=0,n=0;x<p.w;x+=320,n++){const w=Math.min(335,p.w-x),v=variant,f=terrainFrames[v],s=w/f[2];c.drawImage(this.terrain,f[0],f[1],f[2],f[3],p.x+x,p.y-terrainTops[v]*s,w,f[3]*s);}
   }
-  // Seeded dressing stays near the edges, leaving takeoff and landing positions clear.
-  const seed=(index*13+room*7)%8;
+  // Biome dressing stays near the edges, leaving takeoff and landing positions clear.
+  const seed=stage===1?1:stage===2?6:stage===4?4:0;
   this.plant(c,seed,p.x+p.w*.15,p.y+2,26+seed*2,25+seed*3,stage,.8);
   if(p.w>240)this.plant(c,(seed+4)%8,p.x+p.w*.79,p.y+2,34,32,stage,.7);
  }

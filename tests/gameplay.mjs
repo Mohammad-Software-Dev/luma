@@ -8,10 +8,13 @@ const prefs=await import(preferencesURL);
 const campaignURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/campaign.ts',import.meta.url),'utf8'))).toString('base64');
 const campaign=await import(campaignURL);
 const atlasURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/art-atlas.ts',import.meta.url),'utf8'))).toString('base64');
-const visualsURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/combat-visuals.ts',import.meta.url),'utf8')).replace("'./art-atlas'",JSON.stringify(atlasURL))).toString('base64');
+const bossAtlasURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/boss-action-atlas.ts',import.meta.url),'utf8'))).toString('base64');
+const visualsURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/combat-visuals.ts',import.meta.url),'utf8')).replace("'./art-atlas'",JSON.stringify(atlasURL)).replace("'./boss-action-atlas'",JSON.stringify(bossAtlasURL))).toString('base64');
 const environmentAtlasURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/environment-atlas.ts',import.meta.url),'utf8'))).toString('base64');
-const environmentURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/environment.ts',import.meta.url),'utf8')).replace("'./environment-atlas'",JSON.stringify(environmentAtlasURL))).toString('base64');
-const compiled=compile(source).replace("'./environment'",JSON.stringify(environmentURL)).replace("'./combat-visuals'",JSON.stringify(visualsURL)).replaceAll("'./campaign'",JSON.stringify(campaignURL)).replace("'./preferences'",JSON.stringify(preferencesURL));
+const sceneryURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/scenery.ts',import.meta.url),'utf8'))).toString('base64');
+const environmentURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/environment.ts',import.meta.url),'utf8')).replace("'./environment-atlas'",JSON.stringify(environmentAtlasURL)).replace("'./scenery'",JSON.stringify(sceneryURL))).toString('base64');
+const encountersURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/encounters.ts',import.meta.url),'utf8')).replace("'./campaign'",JSON.stringify(campaignURL))).toString('base64');
+const compiled=compile(source).replace("'./encounters'",JSON.stringify(encountersURL)).replace("'./environment'",JSON.stringify(environmentURL)).replace("'./combat-visuals'",JSON.stringify(visualsURL)).replaceAll("'./campaign'",JSON.stringify(campaignURL)).replace("'./preferences'",JSON.stringify(preferencesURL));
 const storage=new Map();globalThis.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
 const noop=()=>{};globalThis.window={devicePixelRatio:1,addEventListener:noop,removeEventListener:noop};globalThis.document={hidden:false,addEventListener:noop,removeEventListener:noop};
 globalThis.Image=class {complete=false;naturalWidth=0;set src(v){queueMicrotask(()=>this.onload?.())}};
@@ -332,7 +335,7 @@ check('Gentle Journey forgives falls and extends damage grace without removing e
 });
 check('Gentle Journey extends boss warnings and recovery and slows their projectiles',()=>{
  game.setPreferences({...prefs.defaultPreferences(),assist:true});game.start();prepare(1);place(11,1400);game.invincible=100;const e=game.world[11].enemies[0];e.timer=0;
- game.updateEnemies(.51);assert.equal(e.windup,1.3*1.45);game.updateEnemies(1.4);assert.equal(e.mode,'windup');assert.equal(game.projectiles.length,0);game.updateEnemies(.5);assert.equal(e.mode,'attack');game.updateEnemies(.3);assert.equal(e.mode,'recover');assert.equal(e.timer,1.85*1.4);assert.equal(game.projectiles.length,5);assert.ok(Math.abs(Math.hypot(game.projectiles[0].vx,game.projectiles[0].vy)-225*.8)<.001);
+ game.updateEnemies(.51);assert.equal(e.mode,'reposition');game.updateEnemies(.71);assert.equal(e.windup,1.3*1.45);game.updateEnemies(1.4);assert.equal(e.mode,'windup');assert.equal(game.projectiles.length,0);game.updateEnemies(.5);assert.equal(e.mode,'attack');for(let i=0;i<67;i++)game.updateEnemies(.01);assert.equal(e.mode,'recover');assert.ok(e.timer>2.5);assert.equal(game.projectiles.length,9);assert.ok(Math.abs(Math.hypot(game.projectiles[0].vx,game.projectiles[0].vy)-225*.8)<.001);
  game.setPreferences(prefs.defaultPreferences());
 });
 
@@ -413,8 +416,8 @@ check('Moving platforms carry standing players horizontally and vertically',()=>
 });
 check('Boss charge, slam, fan, spiral, rain, and eruption attacks all release from committed warnings',()=>{
  const examples=[['charge',0,0],['slam',0,1],['fan',1,0],['rain',1,1],['eruption',2,0],['spiral',3,0]];
- for(const [pattern,stage,cycle] of examples){game.start();prepare(stage);place(campaign.stageRooms(stage)[3],1400);game.invincible=100;const e=game.world[game.state.room].enemies[0];e.cycle=cycle;e.timer=0;game.updateBoss(e,.6);assert.equal(e.pattern,pattern);assert.equal(e.mode,'windup');const aim=e.aimX;game.player.x=1900;game.updateBoss(e,1.31);assert.equal(e.aimX,aim);assert.equal(e.mode,'attack');
-  if(['fan','spiral','slam'].includes(pattern))assert.ok(game.projectiles.length>0);if(['rain','eruption'].includes(pattern)){assert.equal(game.bossHazards.length,3);assert.ok(game.bossHazards.every(h=>h.timer>0));game.player.x=aim;game.player.y=705;game.invincible=0;game.updateHazards(.5);assert.equal(game.state.health,5);game.updateHazards(.6);assert.equal(game.state.health,4)}
+ for(const [pattern,stage,cycle] of examples){game.start();prepare(stage);place(campaign.stageRooms(stage)[3],1400);game.invincible=100;const e=game.world[game.state.room].enemies[0];e.cycle=cycle;e.timer=0;game.updateBoss(e,.6);assert.equal(e.pattern,pattern);if(e.mode==='reposition')game.updateBoss(e,1);assert.equal(e.mode,'windup');const aim=e.aimX;game.player.x=1900;game.updateBoss(e,1.31);assert.equal(e.aimX,aim);assert.equal(e.mode,'attack');
+  if(['fan','spiral'].includes(pattern))assert.ok(game.projectiles.length>0);if(pattern==='slam'){assert.equal(game.projectiles.length,0);game.updateBoss(e,.71);assert.equal(e.mode,'recover');assert.ok(game.projectiles.length>0);}if(['rain','eruption'].includes(pattern)){assert.equal(game.bossHazards.length,3);assert.ok(game.bossHazards.every(h=>h.timer>0));game.player.x=aim;game.player.y=705;game.invincible=0;game.updateHazards(.5);assert.equal(game.state.health,5);game.updateHazards(.6);assert.equal(game.state.health,4)}
   if(pattern==='charge'){const x=e.x;game.updateBoss(e,.3);assert.notEqual(e.x,x)}
  }
 });
@@ -463,7 +466,7 @@ check('The first guardian is beatable with five hearts, ordinary jumps, and no i
  game.start();prepare(0);place(8,1400);const e=game.world[8].enemies[0];let jumpHeld=0,strikeHeld=false;
  for(let frame=0;frame<120*180&&e.hp>0&&game.state.room===8;frame++){
   jumpHeld=Math.max(0,jumpHeld-1/120);
-  if(e.mode==='windup'&&e.timer<.2&&game.player.grounded)jumpHeld=.7;
+  if(game.player.grounded&&((e.mode==='windup'&&e.pattern==='charge'&&e.timer<.2)||(e.mode==='attack'&&e.pattern==='slam'&&e.timer<.22)))jumpHeld=.7;
   game.input('Space',jumpHeld>0);
   let goal=e.mode==='recover'?e.x:e.x-100;
   if(game.player.grounded&&game.player.y<705){const plat=game.world[8].platforms.find(p=>p.y===game.player.y&&game.player.x>=p.x&&game.player.x<=p.x+p.w);if(plat)goal=plat.x-45}
@@ -531,5 +534,52 @@ const missingEnvironment=new Environment();await missingEnvironment.ready;global
 check('Missing environment art retains playable surfaces and readable hazard fallbacks',()=>{
  assert.doesNotThrow(()=>{missingEnvironment.platform(context,{x:0,y:400,w:250,h:48},0,0,1);missingEnvironment.beacon(context,100,200,false,0,true);missingEnvironment.shrine(context,100,0,true);missingEnvironment.brambles(context,100,400,45,270);missingEnvironment.vent(context,{x:0,y:400,w:80,h:305,active:true},1,0,true);});
 });
+
+check('Terrain materials follow the biome and platform role instead of cycling by index',()=>{
+ for(let stage=0;stage<6;stage++){const ground={x:0,y:705,w:700,h:180},expected=[0,2,3,1,4,5][stage];for(let i=0;i<12;i++)assert.equal(terrainVariant(stage,stage,i,ground),expected);}
+ assert.equal(terrainVariant(0,0,4,{x:800,y:400,w:240,h:48}),1);
+ assert.equal(terrainVariant(4,4,3,{x:800,y:300,w:300,h:48}),5);
+});
+check('Warm scenery draws reuse surfaces and moving platforms keep their cached art',()=>{
+ const originalCreate=document.createElement;let made=0,filters=0;
+ document.createElement=()=>{made++;return {width:0,height:0,getContext:()=>new Proxy({...context,globalAlpha:1},{get:(o,k)=>o[k]??noop,set:(o,k,v)=>{if(k==='filter'&&v!=='none')filters++;o[k]=v;return true}})}};
+ const env=new Environment();env.terrain.naturalWidth=1536;env.props.naturalWidth=1920;env.foliage.naturalWidth=1024;
+ const p={x:120,y:440,w:220,h:48,moving:{axis:'x'}};
+ env.background(context,0,0,1440,0,false,0);env.platform(context,p,0,0,1);const count=made,filterCount=filters,old=[...env.planes,...env.platforms.values()];
+ for(let n=0;n<60;n++){p.x++;env.background(context,0,n,1440,n/60,false,0);env.platform(context,p,0,0,1);}
+ assert.equal(made,count);assert.equal(filters,filterCount);assert.equal(env.platforms.size,1);
+ env.background(context,1,0,1440,1,false,1);env.platform(context,p,1,1,1);assert.ok(old.every(c=>c.width===0));assert.equal(env.platforms.size,1);env.destroy();assert.equal(env.planes.length,0);document.createElement=originalCreate;
+});
+check('Cached terrain keeps its world-height material selection',()=>{
+ const originalCreate=document.createElement;
+ document.createElement=()=>({width:0,height:0,getContext:()=>context});
+ const env=new Environment();env.terrain.naturalWidth=1536;env.props.naturalWidth=1920;env.foliage.naturalWidth=1024;
+ const variants=[];env.paintPlatform=(c,p,stage,room,index,variant)=>variants.push(variant);
+ env.platform(context,{x:800,y:520,w:240,h:48},0,0,1);env.platform(context,{x:800,y:400,w:240,h:48},0,0,2);
+ assert.deepEqual(variants,[0,1]);env.destroy();document.createElement=originalCreate;
+});
+check('Retina rendering stays within the 1080p pixel budget while preserving the aspect ratio',()=>{
+ const previous=window.devicePixelRatio;window.devicePixelRatio=3;const canvas={width:0,height:0,getContext:()=>context,getBoundingClientRect:()=>({width:2560,height:1440})};const g=new Game(canvas,noop);assert.equal(canvas.width,1920);assert.equal(canvas.height,1080);assert.equal(g.viewport,1440);g.destroy();window.devicePixelRatio=previous;
+});
+check('Moth swoops commit to a destination and expose a safe recovery window',()=>{
+ game.start();place(0,1450);game.invincible=100;const e=game.world[0].enemies[0];e.x=e.home=1560;e.y=650;e.baseY=650;e.timer=0;e.range=0;
+ game.updateEnemies(.01);assert.equal(e.mode,'windup');const target=[e.aimX,e.aimY];game.player.x=2100;game.updateEnemies(.71);assert.equal(e.mode,'attack');const initial=[e.x,e.y];game.updateEnemies(.3);assert.notEqual(e.x,initial[0]);assert.notEqual(e.y,initial[1]);assert.deepEqual([e.aimX,e.aimY],target);game.updateEnemies(.4);assert.equal(e.mode,'recover');
+ game.player.x=e.x;game.player.y=e.y+35;game.invincible=0;const hp=game.state.health;game.updateEnemies(.01);assert.equal(game.state.health,hp);
+});
+check('Bosses reposition before committing and their aim stays locked through the warning',()=>{
+ for(const stage of [0,1,2,3,5]){game.start();prepare(stage);place(campaign.stageRooms(stage)[3],1100);const e=game.world[game.state.room].enemies[0];e.timer=0;const before=[e.x,e.y];game.updateBoss(e,.6);assert.equal(e.mode,'reposition');game.updateBoss(e,.35);assert.notDeepEqual([e.x,e.y],before);game.updateBoss(e,1);assert.equal(e.mode,'windup');const target=[e.aimX,e.aimY,e.direction];game.player.x=2100;game.updateBoss(e,.2);assert.deepEqual([e.aimX,e.aimY,e.direction],target);}
+});
+check('Tidewing releases a spaced volley rather than all projectiles on one frame',()=>{
+ game.start();prepare(1);place(11,1100);game.invincible=100;const e=game.world[11].enemies[0];e.timer=0;game.updateBoss(e,.6);game.updateBoss(e,1);game.updateBoss(e,1.31);assert.equal(game.projectiles.length,3);game.updateBoss(e,.23);assert.equal(game.projectiles.length,6);game.updateBoss(e,.23);assert.equal(game.projectiles.length,9);
+});
+check('A phase transition clears pending attacks and gives the player a non-damaging beat',()=>{
+ game.start();prepare(5);place(23,1400);const e=game.world[23].enemies[0];e.phaseLevel=1;e.hp=Math.floor(e.maxHp*.3);e.mode='attack';game.projectiles=[{x:1400,y:670,vx:0,vy:0,life:3,radius:10}];game.bossHazards=[{x:1400,w:80,timer:0,life:1,fired:true}];game.updateBoss(e,.01);assert.equal(e.mode,'stagger');assert.equal(e.phaseLevel,3);assert.equal(game.projectiles.length,0);assert.equal(game.bossHazards.length,0);const health=game.state.health;game.player.x=e.x;game.updateBoss(e,.5);assert.equal(game.state.health,health);assert.equal(e.mode,'stagger');
+});
+check('Boss action poses and their transitions remain inside the new sprite atlases',()=>{
+ const v=new CombatVisuals(),draws=[],recording=new Proxy({...context,globalAlpha:1,drawImage:(...a)=>draws.push(a)},{get:(o,k)=>o[k]??noop,set:(o,k,x)=>{o[k]=x;return true}});v.bossActions.forEach(a=>a.naturalWidth=2048);
+ for(let boss=0;boss<6;boss++){const e={boss,x:0,y:645,kind:'keeper',hp:10,hit:0,phase:0,timer:.5,windup:1,direction:-1,defeat:0,mode:'reposition'};let t=0;for(const mode of ['reposition','windup','attack','recover','stagger']){e.mode=mode;v.enemy(recording,e,t,false);v.enemy(recording,e,t+.04,false);t++;}}
+ assert.ok(draws.length>=60);for(const [image,x,y,w,h,dx,dy,dw,dh] of draws){assert.ok([x,y,w,h,dx,dy,dw,dh].every(Number.isFinite));assert.ok(x>=0&&y>=0&&x+w<=2048&&y+h<=1200&&dw>0&&dh>0);}
+});
+check('Repeated particle bursts stay bounded',()=>{game.start();for(let i=0;i<20;i++)game.burst(500,500,100,'#ffda99');assert.ok(game.particles.length<=180)});
 
 game.destroy();console.log(`\n${tests} gameplay checks passed.`);

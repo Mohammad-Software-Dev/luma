@@ -19,6 +19,7 @@ The built-in image generation tool created the following original art for this p
 - `luma-movement.webp`: idle, rising jump, falling, and forward dash.
 - `creatures.webp`: four poses each for the leaf moth, amber beetle, lantern flower, and woodland owl.
 - `bosses.webp`: Briarhorn, Tidewing, Amberback, Gale Sovereign, Moonbloom, and Solwarden.
+- `boss-actions-a.webp` and `boss-actions-b.webp`: 24 new action poses across the six guardians, generated in built-in mode using the original boss designs as references. Pivots are in `app/boss-action-atlas.ts`; full prompts are in `docs/art/boss-action-prompts.md`.
 
 Sprite silhouettes were extracted and packed without changing their painted forms, preserving their alpha. Source rectangles and anatomical pivots are recorded in `app/art-atlas.ts`. Boss stance and wing movement are animated procedurally in the renderer.
 
