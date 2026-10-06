@@ -9,7 +9,9 @@ const campaignURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFile
 const campaign=await import(campaignURL);
 const atlasURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/art-atlas.ts',import.meta.url),'utf8'))).toString('base64');
 const visualsURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/combat-visuals.ts',import.meta.url),'utf8')).replace("'./art-atlas'",JSON.stringify(atlasURL))).toString('base64');
-const compiled=compile(source).replace("'./combat-visuals'",JSON.stringify(visualsURL)).replaceAll("'./campaign'",JSON.stringify(campaignURL)).replace("'./preferences'",JSON.stringify(preferencesURL));
+const environmentAtlasURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/environment-atlas.ts',import.meta.url),'utf8'))).toString('base64');
+const environmentURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/environment.ts',import.meta.url),'utf8')).replace("'./environment-atlas'",JSON.stringify(environmentAtlasURL))).toString('base64');
+const compiled=compile(source).replace("'./environment'",JSON.stringify(environmentURL)).replace("'./combat-visuals'",JSON.stringify(visualsURL)).replaceAll("'./campaign'",JSON.stringify(campaignURL)).replace("'./preferences'",JSON.stringify(preferencesURL));
 const storage=new Map();globalThis.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
 const noop=()=>{};globalThis.window={devicePixelRatio:1,addEventListener:noop,removeEventListener:noop};globalThis.document={hidden:false,addEventListener:noop,removeEventListener:noop};
 globalThis.Image=class {complete=false;naturalWidth=0;set src(v){queueMicrotask(()=>this.onload?.())}};
@@ -504,6 +506,30 @@ check('Failed art downloads resolve safely and retain the original renderer fall
  assert.equal(missingArt.hero(context,game.player,.15,1,false,0,false),false);
  assert.equal(missingArt.enemy(context,game.world[0].enemies[0],0,false),false);
  assert.equal(missingArt.projectile(context,{x:0,y:0,vx:1,vy:0,radius:8},0),false);
+});
+
+const {Environment,terrainVariant,parallaxOffset}=await import(environmentURL);
+check('Scenery layers have distinct camera speeds and stay still with reduced motion',()=>{
+ const speeds=[.075,.2,.48,1.12],deltas=speeds.map(speed=>parallaxOffset(850,speed,false)-parallaxOffset(300,speed,false));
+ assert.ok(deltas.every((v,i)=>i===0||v>deltas[i-1]));
+ for(const speed of speeds)assert.equal(parallaxOffset(850,speed,true)-parallaxOffset(300,speed,true),0);
+});
+check('All scenery variants draw within their atlases without changing collision surfaces',()=>{
+ const env=new Environment(),draws=[];
+ const recording=new Proxy({...context,drawImage:(...args)=>draws.push(args),globalAlpha:1},{get:(o,k)=>o[k]??noop,set:(o,k,value)=>{o[k]=value;return true}});
+ env.terrain.naturalWidth=1536;env.props.naturalWidth=1920;
+ const selections=new Set();
+ for(let room=0;room<24;room++)for(const [index,p] of game.world[room].platforms.entries()){
+  const before={...p},stage=campaign.areaStage(room);selections.add(terrainVariant(stage,room,index));env.platform(recording,p,stage,room,index);assert.deepEqual(p,before);
+ }
+ for(let stage=0;stage<6;stage++)for(const camera of [0,850,1700]){env.background(recording,stage,camera,1440,0,false);env.beacon(recording,100,200,true,0,true);env.shrine(recording,100,0,true);env.brambles(recording,100,400,68,270);env.portal(recording,100,705);}
+ assert.equal(selections.size,6);
+ for(const [image,sx,sy,sw,sh,dx,dy,dw,dh] of draws){assert.ok([sx,sy,sw,sh,dx,dy,dw,dh].every(Number.isFinite));assert.ok(sx>=0&&sy>=0&&sw>0&&sh>0&&dw>0&&dh>0&&sx+sw<=image.naturalWidth+.01&&sy+sh<=1080);}
+});
+globalThis.Image=class{naturalWidth=0;set src(v){queueMicrotask(()=>this.onerror?.())}};
+const missingEnvironment=new Environment();await missingEnvironment.ready;globalThis.Image=WorkingImage;
+check('Missing environment art retains playable surfaces and readable hazard fallbacks',()=>{
+ assert.doesNotThrow(()=>{missingEnvironment.platform(context,{x:0,y:400,w:250,h:48},0,0,1);missingEnvironment.beacon(context,100,200,false,0,true);missingEnvironment.shrine(context,100,0,true);missingEnvironment.brambles(context,100,400,45,270);missingEnvironment.vent(context,{x:0,y:400,w:80,h:305,active:true},1,0,true);});
 });
 
 game.destroy();console.log(`\n${tests} gameplay checks passed.`);

@@ -25,3 +25,20 @@ Sprite silhouettes were extracted and packed without changing their painted form
 `luma-base.webp` and `luma-run.webp` are compressed derivatives of the project's existing `guardian.png` and `guardian-run.png`, which remain in the repository as originals.
 
 The prompt set and art direction are recorded in `docs/art/prompts.md`. No character sprites were extracted from commercial games.
+
+## Environment assets
+
+Eight shaded sprites from **Foliage Sprites (1.0)** by **Kenney / Kenney.nl**.
+
+- Source: https://kenney.nl/assets/foliage-sprites
+- Downloaded: 6 October 2026
+- License: **CC0 1.0 Universal**; original notice in `Kenney-Foliage-LICENSE.txt`.
+- Original files: `sprite_0052.png`, `sprite_0056.png`, `sprite_0060.png`, `sprite_0063.png`, `sprite_0071.png`, `sprite_0073.png`, `sprite_0092.png`, `sprite_0095.png` from `PNG/Shaded/`.
+- Adaptation: packed into `environment-foliage.webp`, tinted by biome, placed as platform dressing and a separate foreground parallax layer.
+
+Original painted scenery generated with the built-in image generation tool:
+
+- `environment-terrain.webp`: mossy limestone, root bridge, wet slate, amber crystal shelf, moon mushroom, and broken sandstone arch platforms.
+- `environment-props.webp`: ancient tree, ruined pillar, mushroom grove, seed-lantern beacon, root-wrapped sunwell and amber brambles.
+
+Full prompts, asset locations and integration details: `docs/art/environment-prompts.md`.

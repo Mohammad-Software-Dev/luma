@@ -60,6 +60,12 @@ Touch controls appear on touch devices. The toolbar offers help, saved mute, and
 - Resting also opens the blessings menu. Heartwood costs 20 light for a sixth heart and 35 for a seventh. Glowkeeper costs 25 light and extends mote collection. Purchases require enough light and cannot be repeated after completion.
 - Beacons grant 10 light once. Abilities, discoveries, blessings, cleared creatures, beacons, and guardian victories persist through death and reload. Unfinished guardian fights restart at full health.
 
+## Layered environment
+
+The vista, distant silhouettes, middle scenery and foreground plants scroll at different depths. Reduced motion fixes decorative layers and removes sway. Six painted terrain families bring mossy cliffs, root bridges, wet slate, amber crystals, mushroom shelves and ruined arches to the six biomes. Platform selection is stable during movement; existing collision surfaces and routes are preserved.
+
+Organic seed lanterns, sunwells, ivy-covered passages, brambles and flowing vent effects replace the former geometric markers. Foreground plants stay below the walking surface. Kenney's CC0 Foliage Sprites are adapted into biome-tinted scenery; see [credits](public/art/CREDITS.md) and the [environment prompt set](docs/art/environment-prompts.md).
+
 ## Combat artwork and animation
 
 Luma now uses twelve painted blade-combo poses, with separate idle, jumping, falling, and dash poses alongside the eight-frame run cycle. Each combo has anticipation, a visible release, and recovery; damage begins 45ms into the swing and ends before the recovery pose. Horizontal slashes, rising cuts, and the overhead finisher have different sunlight trails.
@@ -87,13 +93,14 @@ Starting a new journey resets adventure progress and retains device preferences.
 ## Implementation and verification
 
 - `app/campaign.ts`: stage content, authored trials, shared gate rules, and boss attack profiles used by both behavior and warnings.
+- `app/environment.ts` and `app/environment-atlas.ts`: layered scenery, stable terrain variation, organic interaction props and natural hazard effects.
 - `app/combat-visuals.ts` and `app/art-atlas.ts`: shared swing timing, sprite poses, anatomical pivots, and bounded combat effects.
 - `app/game.ts`: fixed-step 120 Hz physics, enemies, hazards, moving platforms, rendering, audio, persistence, and progression.
 - `app/page.tsx`: React interface, guidance, pause menu, and touch input.
 - `app/world-map.tsx`: six-stage campaign map, four-area stage routes, memory clues, and Sunwell travel.
 - `app/preferences.ts`, `app/game-settings.tsx`, and `app/sunwell.tsx`: validated preferences, remapping, settings, and blessing purchases.
 - `public/forest.png`, `public/*.webp`, and guardian images: original generated environment and character artwork, extended with procedural animation and effects.
-- `tests/gameplay.mjs`: 91 deterministic checks with mocked browser APIs. Coverage includes campaign and travel gates, save migration and malformed data, checkpoints, boss attack cycles and rewards, all six guardian counter fights, a first-boss fight with ordinary jumps and five hearts, hazards, moving-platform carry, combat buffering, controller mapping, preferences, audio buses, blessings, and memories. Real movement checks reach every trial beacon and exit and every gauntlet beacon; enemies and hazards are disabled in those geometry checks to isolate reachability.
+- `tests/gameplay.mjs`: 94 deterministic checks with mocked browser APIs. Coverage includes campaign and travel gates, save migration and malformed data, checkpoints, boss attack cycles and rewards, all six guardian counter fights, a first-boss fight with ordinary jumps and five hearts, hazards, moving-platform carry, combat buffering, controller mapping, preferences, audio buses, blessings, and memories. Real movement checks reach every trial beacon and exit and every gauntlet beacon; enemies and hazards are disabled in those geometry checks to isolate reachability.
 
 ```sh
 npm test

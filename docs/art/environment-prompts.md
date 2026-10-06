@@ -1,0 +1,23 @@
+# Environment artwork — 6 October 2026
+
+Mode: built-in image generation, transparent output. Both sheets were generated from text without image references. Runtime derivatives live in `public/art/` and preserve alpha. Individual connected silhouettes are isolated before packing to avoid adjacent-cell bleed. Source coordinates and walkable crown anchors live in `app/environment-atlas.ts`.
+
+## Terrain sheet
+
+Saved as `public/art/environment-terrain.webp`.
+
+Use case: stylized-concept. Asset type: transparent 2D side-view platformer terrain atlas for Luma, a joyful painterly fantasy forest Metroidvania with realistic bark, stone, moss and soft golden sunlight. Create SIX isolated broad platform sprites in a strict 2-column by 3-row grid on transparent background, each entirely contained in its own equal cell with generous empty padding, no overlap. Landscape canvas 1536x1024. Each platform about 620px wide and 230px high. Side elevation, continuous nearly horizontal walkable top across its width (NOT an isometric tabletop), sculpted irregular underside, no rectangular block silhouettes. Top row: left moss-covered weathered limestone shelf with dangling roots and tiny white flowers; right twisted ancient fallen tree bridge with bark, root strands and fern shoots. Middle row: left wet slate shelf with turquoise moss and little cascading water tendrils; right warm ochre cave shelf with amber crystals embedded underneath and dark exposed stone. Bottom row: left enormous broad ivory-lilac shelf mushroom with flat gently undulating cap and layered gills below, moonlit blue tiny flowers; right broken ancient pale sandstone arch ledge with ornate carved fragments, trailing ivy and gold lichen, a continuous flat walkable crown and jagged broken arch below. High detail cinematic painted game art, legible silhouettes, crisp alpha edges. Every platform visually distinct, realistic natural materials. No background, no ground shadows, no sky, no text, no grid lines, no characters, no UI, no floating particles outside each sprite.
+
+## Scenery and interaction props
+
+Saved as `public/art/environment-props.webp`.
+
+Use case: stylized-concept. Transparent environment prop atlas for Luma, joyful cinematic fantasy forest platformer, realistic painterly bark and stone textures, warm sunlight and restrained magical glows. SIX isolated objects, strict 3 columns x 2 rows evenly spaced grid, each within its equal cell with 30px transparent margin, no overlap. Landscape canvas 1536x1024. TOP ROW left: an ancient crooked forest tree with roots and airy leafy canopy, entire tree visible, suitable parallax cutout, slender curved trunk, sparse leaves allowing scenery through; middle: broken tall ruined stone arch pillar with ivy, entire object visible; right: tall graceful grove of three giant pale blue mushrooms, entire object visible. BOTTOM ROW left: trail beacon, a little wooden crooked stem that curls around a glowing golden seed lantern like a shepherd's crook, leafy base and two small flowers, organic uncut wood, single object, no diamond shapes; middle: sunwell shrine, a shallow weathered round stone basin cupped by gnarled roots, filled with softly luminous mint water, small moss-covered standing stones behind it and white flowers; right: dense amber bramble thicket, tangled twisting thorn roots with naturally curved points, vertical silhouette suitable for a breakable passage barrier. Side-view game prop artwork, rich texture, natural asymmetry, distinguishable outlines. No background, no horizon, no ground plane, no text, no outlines around cells, no UI, no characters. True transparency behind all objects and in holes between branches. Keep each sprite separate.
+
+## Integration
+
+The six platform families are selected deterministically by stage, room and platform index. Moving platforms keep their appearance as they travel. Art is registered against the existing horizontal collision tops; decorative roots and flowers are not colliders. Long ground spans combine smaller crown pieces and natural cliff edges. The original level layouts, hazard hitboxes, saves and progression are unchanged.
+
+Depth planes use camera factors 0.075 (original vista), 0.2 (distant silhouettes), 0.48 (middle scenery), 1.0 (playable world) and 1.12 (foreground plants). Reduced motion fixes the decorative layers in place and disables their sway. Kenney foliage receives biome tinting in a cache bounded to six atlases. Foreground plants remain below the walking surface.
+
+Interaction art replaces the old diamond beacon and shrine, square ability frame, simple passage arc, thorn block and rectangular hazard columns. Hazard warnings retain their labels and ground footprints.
