@@ -14,7 +14,9 @@ const environmentAtlasURL='data:text/javascript;base64,'+Buffer.from(compile(fs.
 const sceneryURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/scenery.ts',import.meta.url),'utf8'))).toString('base64');
 const environmentURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/environment.ts',import.meta.url),'utf8')).replace("'./environment-atlas'",JSON.stringify(environmentAtlasURL)).replace("'./scenery'",JSON.stringify(sceneryURL))).toString('base64');
 const encountersURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/encounters.ts',import.meta.url),'utf8')).replace("'./campaign'",JSON.stringify(campaignURL))).toString('base64');
-const compiled=compile(source).replace("'./encounters'",JSON.stringify(encountersURL)).replace("'./environment'",JSON.stringify(environmentURL)).replace("'./combat-visuals'",JSON.stringify(visualsURL)).replaceAll("'./campaign'",JSON.stringify(campaignURL)).replace("'./preferences'",JSON.stringify(preferencesURL));
+const fallsURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/falls.ts',import.meta.url),'utf8'))).toString('base64');
+const falls=await import(fallsURL);
+const compiled=compile(source).replace("'./falls'",JSON.stringify(fallsURL)).replace("'./encounters'",JSON.stringify(encountersURL)).replace("'./environment'",JSON.stringify(environmentURL)).replace("'./combat-visuals'",JSON.stringify(visualsURL)).replaceAll("'./campaign'",JSON.stringify(campaignURL)).replace("'./preferences'",JSON.stringify(preferencesURL));
 const storage=new Map();globalThis.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
 const noop=()=>{};globalThis.window={devicePixelRatio:1,addEventListener:noop,removeEventListener:noop};globalThis.document={hidden:false,addEventListener:noop,removeEventListener:noop};
 globalThis.Image=class {complete=false;naturalWidth=0;set src(v){queueMicrotask(()=>this.onload?.())}};
@@ -254,8 +256,8 @@ check('Memory Blooms require their ability and an interaction; each grants light
  game.start();for(const bloom of memoryBlooms){for(const r of game.world){r.motes=[];for(const e of r.enemies)e.hp=0}place(bloom.room,bloom.x,bloom.y+35);game.state[bloom.needs]=false;
   run(.01);assert.equal(game.state.discoveries.includes(bloom.id),false);tap('KeyE');assert.equal(game.state.discoveries.includes(bloom.id),false);
   game.state[bloom.needs]=true;const light=game.state.light;tap('KeyE');assert.equal(game.state.discoveries.includes(bloom.id),true);assert.equal(game.state.light,light+20);tap('KeyE');assert.equal(game.state.light,light+20);
- }assert.equal(game.state.discoveries.length,3);game.start(true);assert.equal(game.state.discoveries.length,3);assert.equal(game.state.light,60);assert.equal(game.state.seeds.length,0);
- const bloom=memoryBlooms[0];game.world[0].motes=[];place(0,bloom.x,bloom.y+35);tap('KeyE');assert.equal(game.state.light,60);
+ }assert.equal(game.state.discoveries.length,4);game.start(true);assert.equal(game.state.discoveries.length,4);assert.equal(game.state.light,80);assert.equal(game.state.seeds.length,0);
+ const bloom=memoryBlooms[0];game.world[0].motes=[];place(0,bloom.x,bloom.y+35);tap('KeyE');assert.equal(game.state.light,80);
 });
 check('Memories reject distant interactions and do not change the active Sunwell',()=>{
  game.start();game.state.doubleJump=true;const checkpoint={...game.checkpoint};place(0,875,705);tap('KeyE');assert.equal(game.state.discoveries.length,0);assert.deepEqual(game.checkpoint,checkpoint);
@@ -279,9 +281,9 @@ check('Brook memory is reachable from the starting Sunwell using real jumps',()=
  game.input('ArrowRight',true);game.input('Space',true);run(.42);game.input('Space',false);run(1/120);game.input('Space',true);run(.3);game.input('Space',false);game.input('ArrowRight',false);run(1.2);
  assert.equal(game.player.y,455,`Brook ledge ${game.player.x},${game.player.y}`);tap('KeyE');assert.ok(game.state.discoveries.includes('brook-song'));
 });
-check('Waterfall memory is reachable from its Sunwell through two ordinary jumps',()=>{
+check('Waterfall memory is reachable with current riding and an ordinary jump',()=>{
  game.start();game.state.dash=true;for(const e of game.world[1].enemies)e.hp=0;place(1,310);
- for(const height of [560,460]){game.input('ArrowRight',true);game.input('Space',true);run(1);game.input('Space',false);game.input('ArrowRight',false);run(.15);assert.equal(game.player.y,height,`Falls ledge ${game.player.x},${game.player.y}`)}
+ for(const height of [560,460]){game.input('ArrowRight',true);game.input('Space',true);run(1);game.input('Space',false);game.input('ArrowRight',false);run(.8);assert.equal(game.player.y,height,`Falls ledge ${game.player.x},${game.player.y}`)}
  tap('KeyE');assert.ok(game.state.discoveries.includes('waterfall-wish'));assert.equal(game.state.doubleJump,false);assert.equal(game.state.room,1);
 });
 check('Canopy memory is reachable from its Sunwell with a high double jump',()=>{
@@ -436,14 +438,35 @@ function jumpTo(plat,double=false){
  game.input('Space',true);
  for(let step=0;step<260;step++){
   if(double&&step===50)game.input('Space',false);if(double&&step===52)game.input('Space',true);
+  if(falls.ridingCurrent(game.state.room,game.player.x,game.player.y,game.state.time)&&game.player.y<plat.y-15&&Math.abs(center()-game.player.x)<plat.w/2)game.input('Space',false);
   const delta=center()-game.player.x;game.input('ArrowRight',delta>22);game.input('ArrowLeft',delta< -22);run(1/120);
   if(step>30&&game.player.grounded&&Math.abs(game.player.y-plat.y)<3&&game.player.x>plat.x&&game.player.x<plat.x+plat.w)break;
  }
  game.keys.clear();run(.1);assert.ok(game.player.grounded&&Math.abs(game.player.y-plat.y)<3,`Land on ${plat.x},${plat.y}; got ${game.player.x},${game.player.y}`);
 }
+
+function rideTo(currentX,topY,landingX,landingY){
+ walkToward(currentX,6);game.input('Space',true);
+ for(let step=0;step<120*12&&game.player.y>topY;step++)run(1/120);
+ assert.ok(game.player.y<=topY,`Current must reach ${topY}; got ${game.player.x},${game.player.y}`);
+ game.input('Space',false);
+ for(let step=0;step<120*5;step++){
+  const delta=landingX-game.player.x;game.input('ArrowRight',delta>10);game.input('ArrowLeft',delta< -10);run(1/120);
+  if(game.player.grounded&&Math.abs(game.player.y-landingY)<3&&Math.abs(delta)<30)break;
+ }
+ game.keys.clear();run(.1);assert.ok(game.player.grounded&&Math.abs(game.player.y-landingY)<3,`Current landing ${landingX},${landingY}; got ${game.player.x},${game.player.y}`);
+}
+function driveFallsTrial(){
+ const r=game.world[9];
+ rideTo(700,170,690,230);tap('KeyE');assert.ok(game.state.discoveries.includes('river-heart'));
+ // Drop from the secret alcove and approach the pulsing lift along the floor.
+ walkToward(1175,6);rideTo(1175,150,1330,210);walkToward(1300,1);tap('KeyE');assert.ok(game.state.beacons.includes('1:1'));
+ jumpTo(r.platforms.find(p=>p.moving));jumpTo(r.platforms.find(p=>p.x===1950));walkToward(2310,8);run(.6);assert.equal(game.player.y,705);assert.equal(game.state.health,5);
+}
 check('All six traversal trials have physically playable routes to their beacons',()=>{
  for(let stage=0;stage<6;stage++){
   game.start();unlock(stage);game.state.doubleJump=stage>=2;game.state.dash=stage>=1;const room=campaign.stageRooms(stage)[1],r=game.world[room];r.enemies=[];r.hazards=[];place(room,230);
+  if(stage===1){driveFallsTrial();continue;}
   // Trials keep three ground islands followed by their hand-authored stepping stones.
   const target=r.platforms.findIndex(p=>r.beacon.x>=p.x&&r.beacon.x<=p.x+p.w&&Math.abs(p.y-r.beacon.y-40)<3);
   for(const plat of r.platforms.slice(0,target+1).filter(p=>p.y<700))jumpTo(plat,stage>=2);
@@ -581,5 +604,58 @@ check('Boss action poses and their transitions remain inside the new sprite atla
  assert.ok(draws.length>=60);for(const [image,x,y,w,h,dx,dy,dw,dh] of draws){assert.ok([x,y,w,h,dx,dy,dw,dh].every(Number.isFinite));assert.ok(x>=0&&y>=0&&x+w<=2048&&y+h<=1200&&dw>0&&dh>0);}
 });
 check('Repeated particle bursts stay bounded',()=>{game.start();for(let i=0;i<20;i++)game.burst(500,500,100,'#ffda99');assert.ok(game.particles.length<=180)});
+
+check('Whisper currents are stage-scoped and the pulsing lift gives a visible rest and warning',()=>{
+ const q=falls.fallsCurrents[9][1];assert.equal(falls.currentState(q,0),'flowing');assert.equal(falls.currentState(q,q.period*.7),'resting');assert.equal(falls.currentState(q,q.period*.9),'rising');assert.equal(falls.currentState(q,q.period),'flowing');
+ assert.equal(falls.ridingCurrent(0,600,600,0),undefined);assert.equal(falls.ridingCurrent(9,1175,500,q.period*.7),undefined);
+});
+check('Currents require held jump, preserve a stronger jump, and release into a real landing',()=>{
+ game.start();place(1,600);game.world[1].enemies=[];run(.3);assert.equal(game.player.y,705);
+ game.input('Space',true);run(.01);assert.ok(game.player.vy< -600,'Current must not weaken the initial jump');run(.8);assert.ok(game.player.y<500);
+ game.input('Space',false);run(1);assert.equal(game.player.y,560);assert.equal(game.player.grounded,true);assert.equal(game.state.doubleJump,false);
+});
+check('The Spillway beacon and Riverheart route work with timed hazards and no double jump',()=>{
+ game.start();unlock(1);game.state.dash=true;game.world[9].enemies=[];place(9,230);driveFallsTrial();assert.equal(game.state.doubleJump,false);
+});
+check('Riverheart persists, grants its reward once, and doubles dash recovery only while riding',()=>{
+ game.start();unlock(1);game.state.dash=true;game.world[9].motes=[];place(9,690,230);const before=game.state.light;tap('KeyE');assert.ok(game.state.discoveries.includes('river-heart'));assert.equal(game.state.light,before+20);tap('KeyE');assert.equal(game.state.light,before+20);game.save();game.start(true);assert.ok(game.state.discoveries.includes('river-heart'));
+ place(1,600,600);game.dashCooldown=.7;game.input('Space',true);run(.1);const upgraded=game.dashCooldown;assert.ok(upgraded<.51&&upgraded>.49);
+ game.state.discoveries=[];place(1,600,600);game.dashCooldown=.7;game.input('Space',true);run(.1);assert.ok(game.dashCooldown>.59&&game.dashCooldown<.61);game.keys.clear();
+});
+function prepareSurge(x=1010){
+ game.start();prepare(1);place(11,x);game.state.dash=true;const e=game.world[11].enemies[0];e.cycle=2;e.timer=0;game.updateBoss(e,.6);game.updateBoss(e,1);assert.equal(e.pattern,'surge');assert.equal(e.mode,'windup');return e;
+}
+check('Tidewing warns before flooding, damages the submerged floor, then offers a long counter window',()=>{
+ const e=prepareSurge(1400);const health=game.state.health;game.updateBoss(e,1);assert.equal(game.state.health,health);assert.equal(e.mode,'windup');game.updateBoss(e,.81);assert.equal(e.mode,'attack');game.updateBoss(e,.01);assert.equal(game.state.health,health-1);
+ game.player.y=550;game.invincible=0;game.updateBoss(e,.2);assert.equal(game.state.health,health-1);game.updateBoss(e,2.5);assert.equal(e.mode,'recover');assert.equal(e.timer,2.8);game.updateBoss(e,.5);assert.ok(e.y>600);assert.equal(game.bossHazards.length,0);
+});
+check('Riding a basin current survives the complete flood without immunity or double jump',()=>{
+ const e=prepareSurge();game.input('Space',true);for(let i=0;i<120*5&&e.mode!=='recover';i++)run(1/120);
+ assert.equal(e.mode,'recover');assert.equal(game.state.health,5);assert.equal(game.state.doubleJump,false);assert.equal(game.invincible,0);game.keys.clear();
+});
+check('Dying during a flood resets Tidewing and removes flood damage after respawn',()=>{
+ const e=prepareSurge(1400);game.updateBoss(e,1.81);game.state.health=1;game.updateBoss(e,.01);assert.equal(game.state.room,0);assert.equal(e.mode,'patrol');assert.equal(e.hp,e.maxHp);assert.equal(game.encounter,null);run(.1);assert.equal(game.state.health,5);
+});
+check('Gentle Journey lengthens the flood warning and recovery without removing its challenge',()=>{
+ game.setPreferences({...prefs.defaultPreferences(),assist:true});const e=prepareSurge();assert.equal(e.windup,1.8*1.35);game.updateBoss(e,2.44);game.player.y=500;game.updateBoss(e,2.61);assert.equal(e.mode,'recover');assert.equal(e.timer,2.8*1.4);game.setPreferences(prefs.defaultPreferences());
+});
+
+
+check('Tidewing can be defeated with five hearts, currents, Sun Dash, and no immunity override',()=>{
+ game.start();prepare(1);place(11,1100);game.state.dash=true;const e=game.world[11].enemies[0];let jumpHeld=0;
+ for(let frame=0;frame<120*180&&e.hp>0&&game.state.room===11;frame++){
+  jumpHeld=Math.max(0,jumpHeld-1/120);
+  const flood=e.pattern==='surge'&&(e.mode==='windup'||e.mode==='attack');
+  let goal=flood?(Math.abs(game.player.x-1015)<Math.abs(game.player.x-1875)?1015:1875):e.x-85;
+  if(!flood&&game.player.grounded&&game.player.y<705){const plat=game.world[11].platforms.find(p=>p.y===game.player.y&&game.player.x>=p.x&&game.player.x<=p.x+p.w);if(plat)goal=plat.x-40;}
+  if(e.pattern==='fan'&&e.mode==='windup'&&e.timer<.25&&game.player.grounded)jumpHeld=.55;
+  if(e.pattern==='rain'&&(e.mode==='attack'||e.mode==='recover'&&e.timer>.3)&&Math.abs(game.player.x-e.aimX)<420)goal=Math.min(2100,e.aimX+440);
+  const delta=goal-game.player.x;game.input('ArrowRight',delta>12);game.input('ArrowLeft',delta< -12);game.input('Space',flood||jumpHeld>0);
+  game.input('KeyJ',frame%45===0); // Repeated normal swings also parry nearby shots.
+  game.input('ShiftLeft',!flood&&e.mode==='recover'&&Math.abs(delta)>200&&game.dashCooldown<=0&&frame%30===0);
+  run(1/120);
+ }
+ assert.equal(e.hp,0,`Tidewing HP ${e.hp}, player ${game.state.health}, room ${game.state.room}`);assert.ok(game.state.bosses.includes(1));assert.equal(game.state.doubleJump,false);
+});
 
 game.destroy();console.log(`\n${tests} gameplay checks passed.`);

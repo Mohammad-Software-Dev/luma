@@ -24,7 +24,7 @@ Each stage has four areas: exploration, a traversal trial, a combat gauntlet, an
 | Stage | Traversal trial | Combat gauntlet | Final guardian |
 | --- | --- | --- | --- |
 | Waking Glade | Bramble Brook | Rootbound Crossing | Briarhorn: charges and ground waves |
-| Whisper Falls | The Spillway | Torrent Stair | Tidewing: projectile fans and marked rain |
+| Whisper Falls | The Spillway | Torrent Stair | Tidewing: projectile fans, marked rain, and basin floods |
 | Amber Hollow | Ember Veins | Crystal Ascent | Amberback: eruptions and charges |
 | Windborne Canopy | Swaying Boughs | Stormleaf Watch | Gale Sovereign: spirals and fans |
 | Moonpetal Sanctuary | Lunar Causeway | Starlit Terraces | Moonbloom: rain, spirals, and eruptions |
@@ -35,6 +35,16 @@ Trials introduce thorns, timed vents, swinging pods, moving platforms, lifts, an
 Guardians announce attacks before releasing them. Dodge, jump, dash, or strike projectiles to create a path, then counter when the guardian opens during recovery. Their second phases intensify their attacks; Solwarden has a third phase. Crossing into a battle seals the arena until victory or defeat. A failed attempt resets that guardian’s health while retaining beacons and cleared gauntlet creatures.
 
 Guardian victories grant 40 light, restore health, activate the arena checkpoint, and open the next stage. The guardians of Amber Hollow, Moonpetal Sanctuary, and Sunspire Ruins restore the three sunseeds. Awakening all six guardians restores dawn.
+
+## Whisper Falls showcase
+
+Whisper Falls now builds its four areas around rising water currents. **Hold jump inside a pale current to rise; release to land.** The entrance provides a safe fountain, the Spillway adds a pulsing lift to a higher beacon, and Torrent Stair combines current riding with an elevated sentry. The pulsing lift has flowing, resting, and rising cues. Sun Dash works normally when leaving the flow; double jump is not needed.
+
+Ride the Spillway's western current to a sheltered high alcove and interact with the **Riverheart**. It grants 20 light and permanently makes Sun Dash recover twice as fast while riding currents. Its story and effect appear on the map, and the reward persists in existing version-2 saves.
+
+Tidewing now raises a basin-wide flood after a visible warning. Ride either current or reach a high ledge to stay above the water, then approach during the longer recovery window. Gentle Journey extends both the flood warning and the counter opportunity. The next stage still requires Tidewing's defeat.
+
+[Stage design and playtest evidence](docs/quality/whisper-falls.md) describes what has been verified and what still needs human playtesting.
 
 ## Controls
 
@@ -56,7 +66,7 @@ Touch controls appear on touch devices. The toolbar offers help, saved mute, and
 ## Exploration, checkpoints, and upgrades
 
 - Rest at a Sunwell to heal, save a checkpoint, and activate travel. Open the map beside a lit Sunwell and select another lit Sunwell in an unlocked stage to travel there. Entering an area alone does not activate its checkpoint.
-- Three optional Memory Blooms wait above the brook, falls, and canopy. Return with movement upgrades and interact beside a bud to awaken it. Each grants 20 light and a story recorded on the map, which provides clues before discovery.
+- Four optional Memory Blooms wait above the brook, falls, Spillway, and canopy. The Spillway’s Riverheart also doubles Sun Dash recovery while riding a current. Return with movement upgrades and interact beside a bud to awaken it. Each grants 20 light and a story recorded on the map, which provides clues before discovery.
 - Resting also opens the blessings menu. Heartwood costs 20 light for a sixth heart and 35 for a seventh. Glowkeeper costs 25 light and extends mote collection. Purchases require enough light and cannot be repeated after completion.
 - Beacons grant 10 light once. Abilities, discoveries, blessings, cleared creatures, beacons, and guardian victories persist through death and reload. Unfinished guardian fights restart at full health.
 
@@ -101,12 +111,13 @@ Starting a new journey resets adventure progress and retains device preferences.
 - `app/campaign.ts`: stage content, authored trials, shared gate rules, and boss attack profiles used by both behavior and warnings.
 - `app/environment.ts`, `app/scenery.ts`, and `app/environment-atlas.ts`: authored parallax compositions, cached terrain, organic interaction props and natural hazard effects.
 - `app/combat-visuals.ts`, `app/art-atlas.ts`, and `app/boss-action-atlas.ts`: shared swing timing, sprite poses, anatomical pivots, and bounded combat effects. `app/encounters.ts` defines boss movement and attack selection.
+- `app/falls.ts`: authored current locations, pulse timing, Riverheart identity, and Tidewing flood timing.
 - `app/game.ts`: fixed-step 120 Hz physics, enemies, hazards, moving platforms, rendering, audio, persistence, and progression.
 - `app/page.tsx`: React interface, guidance, pause menu, and touch input.
 - `app/world-map.tsx`: six-stage campaign map, four-area stage routes, memory clues, and Sunwell travel.
 - `app/preferences.ts`, `app/game-settings.tsx`, and `app/sunwell.tsx`: validated preferences, remapping, settings, and blessing purchases.
 - `public/forest.png`, `public/*.webp`, and guardian images: original generated environment and character artwork, extended with procedural animation and effects.
-- `tests/gameplay.mjs`: 104 deterministic checks with mocked browser APIs. Coverage includes campaign and travel gates, save migration and malformed data, checkpoints, boss attack cycles and rewards, all six guardian counter fights, a first-boss fight with ordinary jumps and five hearts, hazards, moving-platform carry, combat buffering, controller mapping, preferences, audio buses, blessings, and memories. Real movement checks reach every trial beacon and exit and every gauntlet beacon; enemies and hazards are disabled in those geometry checks to isolate reachability.
+- `tests/gameplay.mjs`: 113 deterministic checks with mocked browser APIs. Coverage includes campaign and travel gates, save migration and malformed data, checkpoints, boss attack cycles and rewards, all six guardian counter fights, first- and second-boss fights with five hearts and no immunity override, current riding and timed lifts, Riverheart persistence, flood warnings and damage, hazards, moving-platform carry, combat buffering, controller mapping, preferences, audio buses, blessings, and memories. Real movement checks reach every trial beacon and exit and every gauntlet beacon; enemies and hazards are disabled in those geometry checks to isolate reachability.
 
 ```sh
 npm test

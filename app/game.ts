@@ -1,3 +1,4 @@
+import { fallsCurrents, currentState, ridingCurrent, RIVERHEART, tideSurge } from './falls';
 import { chooseBossPattern, bossChoreography, smoothStep } from './encounters';
 import { Environment } from './environment';
 import { CombatVisuals, strikeTiming, strikeActive } from './combat-visuals';
@@ -67,6 +68,7 @@ function rooms():Room[]{
 export const memoryBlooms=[
  {id:'brook-song',room:0,x:875,y:415,needs:'doubleJump' as const,name:'The Brook’s First Song',hint:'Above the first brook, a quiet bud waits for a skyward leap.',memory:'Before the forest grew sleepy, the brook taught every young leaf to dance.'},
  {id:'waterfall-wish',room:1,x:1000,y:420,needs:'dash' as const,name:'A Waterfall Wish',hint:'Climb above the falls. A golden bud answers the light of Sun Dash.',memory:'A tiny guardian once wished on the falling water. The forest has kept that wish warm.'},
+ {id:RIVERHEART,room:9,x:690,y:190,needs:'dash' as const,name:'The Riverheart',hint:'Ride the western current in the Spillway to a sheltered alcove above the trail.',memory:'The river carries those who listen. Sun Dash now recovers twice as fast while you ride a current.'},
  {id:'wind-lullaby',room:3,x:1730,y:350,needs:'doubleJump' as const,name:'The Wind’s Lullaby',hint:'Seek the highest eastern branch, where the wind rests between songs.',memory:'The canopy sways to an old lullaby. Even the bravest little lights need a place to rest.'}
 ];
 export type Blessing='heart'|'magnet';
@@ -93,7 +95,7 @@ export function journeyObjective(state:Pick<Snapshot,'room'|'dash'|'doubleJump'|
  else if(stage===1&&!state.dash){target=1;title='Awaken Sun Dash.';detail='Find the golden light near the eastern passage.'}
  else if(stage===2&&!state.doubleJump){target=2;title='Find the Sky Feather.';detail='Dash through the amber thorns, then jump onto the first high ledge.'}
  else {const part=[0,1,2].find(n=>!state.beacons.includes(beaconId(stage,n)));
-  if(part!==undefined){target=ids[part];title=`Light the ${['exploration','trial','gauntlet'][part]} beacon.`;detail=part===0?'Find the golden beacon above the main trail, and interact beside it.':part===1?'Cross the shifting platforms and timed hazards. Find and activate the trail beacon.':'Climb the terraces, awaken every creature in the gauntlet, and activate its beacon.'}
+  if(part!==undefined){target=ids[part];title=`Light the ${['exploration','trial','gauntlet'][part]} beacon.`;detail=stage===1?(part===0?'Hold jump inside the pale currents to ride upward. Find the beacon above the falls.':part===1?'Ride the pulsing current, then dash onto the high beacon shelf. A western alcove holds the Riverheart.':'Ride the current to reach the high sentry. Clear every creature and light the beacon.'):part===0?'Find the golden beacon above the main trail, and interact beside it.':part===1?'Cross the shifting platforms and timed hazards. Find and activate the trail beacon.':'Climb the terraces, awaken every creature in the gauntlet, and activate its beacon.'}
   else {target=ids[3];title=`Face ${stages[stage].boss}.`;detail=stages[stage].hint+' Clear every gauntlet creature to open the arena.'}
  }
  if(areaPart(state.room)===2&&state.beacons.includes(beaconId(stage,2))&&state.enemiesLeft>0){target=state.room;title=`Awaken ${state.enemiesLeft} remaining gauntlet creatures.`;detail='Every creature here must be awakened before the arena opens. Climb the terraces to find the sentries.'}
@@ -213,6 +215,11 @@ export class Game {
   const target=dir*325;p.vx=this.dashTime>0?p.face*1000:this.knockback>0?p.vx:p.vx+(target-p.vx)*Math.min(1,dt*(dir?15:20));
   const oldY=p.y,oldX=p.x,wasGrounded=p.grounded;p.x+=p.vx*dt;
   if(this.dashTime<=0){const gravity=p.vy<0&&!this.held('Space','KeyW','ArrowUp')?2300:1550;p.vy=Math.min(1000,p.vy+gravity*dt)}
+  const current=ridingCurrent(this.state.room,p.x,p.y,this.state.time);
+  if(current&&this.held('Space','KeyW','ArrowUp')&&this.dashTime<=0){
+   p.vy=Math.min(p.vy,p.vy+(-current.speed-p.vy)*Math.min(1,dt*12));this.coyote=0;this.jumpBuffer=0;
+   if(this.state.discoveries.includes(RIVERHEART))this.dashCooldown=Math.max(0,this.dashCooldown-dt);
+  }
   p.y+=p.vy*dt;p.grounded=false;
   for(const plat of r.platforms){if(p.x+18>plat.x&&p.x-18<plat.x+plat.w&&p.vy>=0&&oldY<=plat.y+2&&p.y>=plat.y){if(!wasGrounded&&p.vy>230){this.landing=.15;this.visuals.emit('land',p.x,plat.y);this.burst(p.x,plat.y,8,'#d6d3a0');this.tone(110,.06,'triangle',.015)}p.y=plat.y;p.vy=0;p.grounded=true;this.coyote=.12;this.usedDouble=false;if(plat.y===705&&!r.hazards?.some(h=>Math.abs(p.x-h.x)<h.w+30)){this.safe={x:p.x,y:p.y}}}}
   if(this.state.room===2&&!this.broken.has(2)&&p.x+18>590&&p.x-18<635&&p.y>430){if(this.dashTime>0){this.broken.add(2);this.burst(612,580,55,'#ffc478');this.shake=this.reducedMotion?0:8;this.toast('A new path opens. Keep growing, little light.');this.save()}else{p.x=oldX<610?571:654;p.vx=0;if(this.tap('KeyE','ArrowDown'))this.toast(`Amber thorns yield to Sun Dash. Press ${keyLabel(this.preferences.bindings.dash)}.`)}}
@@ -285,7 +292,7 @@ export class Game {
  }
  private beginBossWindup(e:Enemy){
   const p=this.player,profile=bossAttack(e.boss!,e.cycle||0,e.hp,e.maxHp,this.preferences.assist);
-  e.aimX=p.x;e.aimY=p.y-35;e.direction=Math.sign(p.x-e.x)||1;e.mode='windup';e.windup=profile.windup;e.timer=e.windup;
+  e.aimX=p.x;e.aimY=p.y-35;e.direction=Math.sign(p.x-e.x)||1;e.mode='windup';e.windup=profile.windup;e.timer=e.windup;if(e.pattern==='surge'){e.windup=tideSurge.warning*(this.preferences.assist?1.35:1);e.timer=e.windup;}
   e.toX=Math.max(800,Math.min(2040,e.x+Math.max(-230,Math.min(230,e.aimX-e.x))));
   this.tone(140+e.boss!*20,.18,'sine',.025);this.publish();
  }
@@ -305,6 +312,8 @@ export class Game {
   if(this.encounter===null){if(p.x<650)return;this.encounter=this.state.room;e.timer=.5;this.toast(`${stages[stage].boss} · ${stages[stage].hint}`)}
   p.x=Math.max(590,Math.min(2190,p.x));e.timer=Math.max(0,e.timer-dt);
   const profile=bossAttack(stage,e.cycle||0,e.hp,e.maxHp,this.preferences.assist),phase=profile.phase;
+  if(e.pattern==='surge'&&e.mode==='windup')e.y+=(440-e.y)*Math.min(1,dt*3);
+  if(e.pattern==='surge'&&e.mode==='recover')e.y+=(645-e.y)*Math.min(1,dt*7);
   if(e.phaseLevel===undefined)e.phaseLevel=phase;
   // A phase change is a readable breathing beat, with no stale attacks left behind.
   if(phase>e.phaseLevel){e.phaseLevel=phase;e.mode='stagger';e.timer=.85;e.y=645;this.projectiles=[];this.bossHazards=[];this.visuals.emit('awake',e.x,e.y,2);this.toast(`${stages[stage].boss} · Phase ${phase}. A new rhythm awakens.`);this.publish();return;}
@@ -321,27 +330,37 @@ export class Game {
    e.direction=Math.sign(p.x-e.x)||e.direction;
    if(e.timer<=0)this.beginBossWindup(e);
   }else if(e.mode==='windup'&&e.timer<=0){
-   const move=bossChoreography(stage,e.pattern!);e.mode='attack';e.timer=move.active;e.motionDuration=move.active;e.fromX=e.x;e.fromY=e.y;e.shots=0;
+   const move=bossChoreography(stage,e.pattern!);e.mode='attack';e.timer=e.pattern==='surge'?tideSurge.active:move.active;e.motionDuration=e.timer;e.fromX=e.x;e.fromY=e.y;e.shots=0;
    if(e.pattern!=='slam'&&e.pattern!=='charge')this.bossVolley(e);
   }else if(e.mode==='attack'){
    const move=bossChoreography(stage,e.pattern!),u=Math.min(1,1-e.timer/(e.motionDuration||move.active));
    if(e.pattern==='charge'){const accelerate=Math.min(1,.3+u*3.5),brake=u>.82?Math.max(.25,(1-u)/.18):1;e.x=Math.max(800,Math.min(2040,e.x+e.direction*profile.chargeSpeed*accelerate*brake*dt));}
+   else if(e.pattern==='surge'){e.y=440;if(p.y>tideSurge.waterline+20&&this.dashTime<=0){const before=this.respawns;this.hurt(false);if(this.respawns!==before)return;}}
    else if(e.pattern==='slam'||stage===3&&e.pattern==='fan'){
     e.x=(e.fromX??e.x)+((e.toX??e.x)-(e.fromX??e.x))*smoothStep(u);e.y=(e.fromY??645)+(645-(e.fromY??645))*u-Math.sin(Math.PI*u)*move.leap;
    }else e.y=(e.fromY??645)+(645-(e.fromY??645))*smoothStep(u);
    if((e.pattern==='fan'||e.pattern==='spiral')&&(e.shots||0)<move.volleys&&u>=(e.shots||0)/move.volleys)this.bossVolley(e);
    if(e.timer<=0){
-    e.y=645;if(e.pattern==='slam'){
+    if(e.pattern!=='surge')e.y=645;if(e.pattern==='slam'){
      this.visuals.emit('land',e.x,705,2);this.burst(e.x,701,18,stages[stage].color);
      for(const side of [-1,1])for(let n=0;n<(phase>1?2:1);n++)this.projectiles.push({x:e.x+side*65,y:682-n*55,vx:side*270*(profile.projectileSpeed/225),vy:0,life:5,radius:12});
     }
-    e.mode='recover';e.timer=profile.recovery;e.cycle=(e.cycle||0)+1;this.publish();
+    e.mode='recover';e.timer=e.pattern==='surge'?tideSurge.recovery*(this.preferences.assist?1.4:1):profile.recovery;e.cycle=(e.cycle||0)+1;this.publish();
    }
   }else if(e.mode==='recover'&&e.timer<=0){e.mode='patrol';e.timer=.4}
   if(e.mode==='attack'&&Math.abs(e.x-p.x)<65&&Math.abs(e.y-(p.y-35))<65&&this.dashTime<=0)this.hurt(false);
  }
  private drawChallenges(t:number){
   const c=this.ctx,r=this.world[this.state.room],b=r.beacon;
+  for(const q of fallsCurrents[this.state.room]||[]){
+   const phase=currentState(q,this.state.time);this.environment.current(c,q,phase,t,this.reducedMotion);
+   if(Math.abs(this.player.x-(q.x+q.w/2))<210)this.label(phase==='resting'?'CURRENT RESTING':phase==='rising'?'CURRENT RISING':`${this.state.controller?'A':keyLabel(this.preferences.bindings.jump)} · HOLD TO RIDE / RELEASE TO LAND`,q.x+q.w/2,q.y-18,'#c7fbef',11);
+  }
+  const tide=r.enemies.find(e=>e.boss===1&&e.hp>0);
+  if(tide?.pattern==='surge'&&(tide.mode==='windup'||tide.mode==='attack')){
+   this.environment.flood(c,590,2200,tideSurge.waterline,tide.mode==='attack',t,this.reducedMotion);
+   this.label(tide.mode==='windup'?'FLOOD RISING · RIDE A CURRENT':'STAY ABOVE THE WATER',this.camera+this.viewport/2,350,'#d7fbff',15);
+  }
   for(const h of r.hazards||[]){const q=this.hazardShape(h);
    if(h.kind==='swing'){c.strokeStyle='#b6bd9b';c.lineWidth=3;c.beginPath();c.moveTo(h.x,100);c.lineTo(q.x+q.w/2,q.y);c.stroke();this.glow(q.x+q.w/2,q.y+q.h/2,45,'#ffc28b44');this.environment.brambles(c,q.x-6,q.y-6,q.w+12,q.h+12)}
    else if(h.kind==='thorns'){for(let x=q.x;x<q.x+q.w;x+=42)this.environment.brambles(c,x,675,Math.min(48,q.x+q.w-x),32);this.glow(q.x+q.w/2,687,60,'#ffd5a322')}
@@ -358,7 +377,7 @@ export class Game {
   const bloom=memoryBlooms.find(b=>b.room===this.state.room&&!this.state.discoveries.includes(b.id)&&Math.hypot(b.x-this.player.x,b.y-(this.player.y-35))<72);
   if(!bloom)return false;
   if(!this.state[bloom.needs]){this.toast(bloom.needs==='dash'?'This memory bud needs the warmth of Sun Dash.':'A Sky Feather will help this quiet memory bloom.');return true}
-  this.state.discoveries.push(bloom.id);this.state.light+=20;this.burst(bloom.x,bloom.y,65,'#c5f3d7');this.chime();this.toast(`${bloom.name} · Memory ${this.state.discoveries.length} of ${memoryBlooms.length} · +20 light. Read its story on the map.`);this.save();this.publish();return true;
+  this.state.discoveries.push(bloom.id);this.state.light+=20;this.burst(bloom.x,bloom.y,65,'#c5f3d7');this.chime();this.toast(bloom.id===RIVERHEART?'Riverheart awakened! Sun Dash recovers twice as fast while riding a current. +20 light.':`${bloom.name} · Memory ${this.state.discoveries.length} of ${memoryBlooms.length} · +20 light. Read its story on the map.`);this.save();this.publish();return true;
  }
  openSunwell(){if(!this.started||this.state.won||!this.atSunwell())return false;this.setPaused(true);this.publish();this.onMenu('well');return true}
  buyBlessing(id:Blessing){
@@ -500,7 +519,8 @@ export class Game {
     c.save();c.strokeStyle='#ffe0a7';c.lineWidth=2;c.setLineDash([6,7]);c.globalAlpha=.75;
     if(e.boss!==undefined){
      const profile=bossAttack(e.boss,e.cycle||0,e.hp,e.maxHp,this.preferences.assist);
-     if(e.pattern==='charge'){const lane=profile.chargeSpeed*profile.chargeDuration;this.environment.chargeWarning(c,e.x,y,lane,e.direction)}
+     if(e.pattern==='surge'){/* Basin-wide warning is drawn with the current scenery. */}
+     else if(e.pattern==='charge'){const lane=profile.chargeSpeed*profile.chargeDuration;this.environment.chargeWarning(c,e.x,y,lane,e.direction)}
      else if(e.pattern==='slam'){c.strokeStyle='#ffdb9e';for(const side of [-1,1]){c.beginPath();c.moveTo((e.toX??e.x)+side*70,683);c.lineTo((e.toX??e.x)+side*360,683);c.stroke();this.label('LANDING · JUMP', (e.toX??e.x)+side*180,654,'#ffe2b4',12)}}
      else if(e.boss===3&&e.pattern==='fan'){c.beginPath();c.moveTo(e.x,e.y);c.quadraticCurveTo(e.x,420,e.toX??e.x,645);c.stroke();this.label('DIVE · MOVE',e.toX??e.x,610,'#ffe2b4',12)}
      else if(e.pattern==='rain'||e.pattern==='eruption'){for(const offset of profile.marks)this.environment.vent(c,{x:Math.max(650,Math.min(2110,e.aimX+offset))-35,y:500,w:70,h:205,warning:true},areaStage(this.state.room),t,this.reducedMotion)}

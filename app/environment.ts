@@ -109,6 +109,20 @@ export class Environment {
   this.plant(c,seed,p.x+p.w*.15,p.y+2,26+seed*2,25+seed*3,stage,.8);
   if(p.w>240)this.plant(c,(seed+4)%8,p.x+p.w*.79,p.y+2,34,32,stage,.7);
  }
+
+ current(c:CanvasRenderingContext2D,q:{x:number;y:number;w:number;h:number},phase:string,t:number,reduced:boolean){
+  const flowing=phase==='flowing';c.save();c.globalAlpha=flowing?.6:phase==='rising'?.32:.13;
+  // Curved ribbons communicate upward flow without opaque walls across the route.
+  c.fillStyle='#8edbd515';c.beginPath();c.ellipse(q.x+q.w/2,q.y+q.h,q.w*.6,13,0,0,Math.PI*2);c.fill();
+  for(let i=0;i<5;i++){const x=q.x+12+i*(q.w-24)/4;c.strokeStyle=i%2?'#d7ffff':'#69c8cb';c.lineWidth=i%2?2:5;c.beginPath();c.moveTo(x,q.y+q.h);c.bezierCurveTo(x-18,q.y+q.h*.66,x+16,q.y+q.h*.3,x,q.y+15);c.stroke();
+   if(flowing)for(let n=0;n<3;n++){const y=q.y+((n/3+i*.07+(reduced?0:-t*.45))%1+1)%1*q.h;c.lineWidth=1.6;c.beginPath();c.moveTo(x-5,y+6);c.quadraticCurveTo(x,y-6,x+5,y+6);c.stroke();}
+  }
+  c.strokeStyle='#d0fff2';c.lineWidth=2;c.beginPath();c.ellipse(q.x+q.w/2,q.y+q.h,q.w*.57,9,0,0,Math.PI*2);c.stroke();c.restore();
+ }
+ flood(c:CanvasRenderingContext2D,left:number,right:number,y:number,active:boolean,t:number,reduced:boolean){
+  c.save();c.fillStyle=active?'#499ba654':'#b7f4ff12';c.strokeStyle=active?'#c4ffff':'#a9f6ecc0';c.lineWidth=active?3:1.5;if(!active)c.setLineDash([12,12]);
+  c.beginPath();c.moveTo(left,810);c.lineTo(left,y);for(let x=left;x<=right;x+=20)c.lineTo(x,y+Math.sin(x*.024+(reduced?0:t*3))*5);c.lineTo(right,810);c.closePath();c.fill();c.beginPath();for(let x=left;x<=right;x+=20){const wave=y+Math.sin(x*.024+(reduced?0:t*3))*5;if(x===left)c.moveTo(x,wave);else c.lineTo(x,wave);}c.stroke();c.restore();
+ }
  beacon(c:CanvasRenderingContext2D,x:number,y:number,lit:boolean,t:number,reduced:boolean){
   c.save();if(lit)c.filter='hue-rotate(35deg)';const bob=reduced?0:Math.sin(t*2)*1.5;
   if(!this.prop(c,3,x-4,y+41,62,99)){c.strokeStyle='#b6c879';c.lineWidth=4;c.beginPath();c.moveTo(x-15,y+40);c.bezierCurveTo(x-40,y-42,x+30,y-45,x,y);c.stroke();}
