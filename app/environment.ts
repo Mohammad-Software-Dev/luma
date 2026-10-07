@@ -1,6 +1,8 @@
 import { roomComposition, sceneryPlans } from './scenery';
 import { terrainFrames, terrainTops, propFrames } from './environment-atlas';
 
+const crystalFrames=[[84,18,453,670],[665,71,569,628],[28,844,655,364],[740,811,464,385]];
+
 type Platform = {x:number;y:number;w:number;h:number;moving?:unknown};
 const palettes = [
  ['#284d38','#698654','#d8dba0'],['#234a50','#639d97','#c8e5c9'],['#4f3d35','#a0864c','#f3d092'],
@@ -19,7 +21,7 @@ export function parallaxOffset(camera:number,depth:number,reduced:boolean){retur
 
 /** Painted scenery is independent of collision geometry. All caches have fixed bounds. */
 export class Environment {
- private terrain=new Image();private props=new Image();private foliage=new Image();
+ private terrain=new Image();private props=new Image();private foliage=new Image();private crystals=new Image();
  private plants=new Map<number,HTMLCanvasElement>();
  private platforms=new Map<string,HTMLCanvasElement>();private cachedRoom=-1;
  private planes:HTMLCanvasElement[]=[];private planeKey='';
@@ -28,7 +30,7 @@ export class Environment {
 
  readonly ready:Promise<void>;
  constructor(){this.ready=Promise.all([
-  this.load(this.terrain,'terrain'),this.load(this.props,'props'),this.load(this.foliage,'foliage'),
+  this.load(this.crystals,'crystals'),this.load(this.terrain,'terrain'),this.load(this.props,'props'),this.load(this.foliage,'foliage'),
  ]).then(()=>{});}
  private load(image:HTMLImageElement,name:string){return new Promise<void>(resolve=>{image.onload=()=>resolve();image.onerror=()=>resolve();image.src=`/art/environment-${name}.webp`;});}
  private prop(c:CanvasRenderingContext2D,index:number,x:number,base:number,w:number,h?:number,flip=false){
@@ -110,6 +112,23 @@ export class Environment {
   if(p.w>240)this.plant(c,(seed+4)%8,p.x+p.w*.79,p.y+2,34,32,stage,.7);
  }
 
+ crystal(c:CanvasRenderingContext2D,x:number,base:number,w:number,h:number,broken:boolean,regrowing:boolean){
+  if(this.crystals.naturalWidth){
+   // Tight alpha bounds from the painted atlas; fixed base keeps each state rooted.
+   const index=regrowing?3:broken?2:w>80?1:0,[sx,sy,sw,sh]=crystalFrames[index];
+   const height=regrowing?h*.5:broken?34:h;
+   c.drawImage(this.crystals,sx,sy,sw,sh,x-w/2,base-height+5,w,height);return;
+  }
+  c.save();c.translate(x,base);if(broken&&!regrowing)c.globalAlpha=.48;
+  const height=broken?(regrowing?h*.5:18):h;
+  this.prop(c,5,0,4,w*.92,height); // Painted amber roots tie the formation into the terrain.
+  for(let i=0;i<5;i++){
+   const offset=(i-2)*w*.16,tip=-height*(i===2?1:.58+(i%2)*.2),lean=(i-2)*w*.07;
+   c.fillStyle=['#a25f30','#d0954f','#f2bd70','#cf9347','#925630'][i];c.beginPath();c.moveTo(offset-w*.16,0);c.bezierCurveTo(offset-w*.13,tip*.5,offset+lean-w*.08,tip*.8,offset+lean,tip);c.lineTo(offset+lean+w*.13,tip*.45);c.quadraticCurveTo(offset+w*.2,-8,offset+w*.16,0);c.closePath();c.fill();
+   c.strokeStyle='#ffe2a4';c.globalAlpha*=.75;c.lineWidth=1.3;c.beginPath();c.moveTo(offset+lean,tip+4);c.lineTo(offset+3,-6);c.stroke();c.globalAlpha/=.75;
+  }
+  c.restore();
+ }
  current(c:CanvasRenderingContext2D,q:{x:number;y:number;w:number;h:number},phase:string,t:number,reduced:boolean){
   const flowing=phase==='flowing';c.save();c.globalAlpha=flowing?.6:phase==='rising'?.32:.13;
   // Curved ribbons communicate upward flow without opaque walls across the route.

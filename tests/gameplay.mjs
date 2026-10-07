@@ -16,7 +16,9 @@ const environmentURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readF
 const encountersURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/encounters.ts',import.meta.url),'utf8')).replace("'./campaign'",JSON.stringify(campaignURL))).toString('base64');
 const fallsURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/falls.ts',import.meta.url),'utf8'))).toString('base64');
 const falls=await import(fallsURL);
-const compiled=compile(source).replace("'./falls'",JSON.stringify(fallsURL)).replace("'./encounters'",JSON.stringify(encountersURL)).replace("'./environment'",JSON.stringify(environmentURL)).replace("'./combat-visuals'",JSON.stringify(visualsURL)).replaceAll("'./campaign'",JSON.stringify(campaignURL)).replace("'./preferences'",JSON.stringify(preferencesURL));
+const hollowURL='data:text/javascript;base64,'+Buffer.from(compile(fs.readFileSync(new URL('../app/hollow.ts',import.meta.url),'utf8'))).toString('base64');
+const hollow=await import(hollowURL);
+const compiled=compile(source).replace("'./hollow'",JSON.stringify(hollowURL)).replace("'./falls'",JSON.stringify(fallsURL)).replace("'./encounters'",JSON.stringify(encountersURL)).replace("'./environment'",JSON.stringify(environmentURL)).replace("'./combat-visuals'",JSON.stringify(visualsURL)).replaceAll("'./campaign'",JSON.stringify(campaignURL)).replace("'./preferences'",JSON.stringify(preferencesURL));
 const storage=new Map();globalThis.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
 const noop=()=>{};globalThis.window={devicePixelRatio:1,addEventListener:noop,removeEventListener:noop};globalThis.document={hidden:false,addEventListener:noop,removeEventListener:noop};
 globalThis.Image=class {complete=false;naturalWidth=0;set src(v){queueMicrotask(()=>this.onload?.())}};
@@ -255,9 +257,9 @@ check('Corrupt blessing and memory fields are sanitized without inflating hearts
 check('Memory Blooms require their ability and an interaction; each grants light exactly once',()=>{
  game.start();for(const bloom of memoryBlooms){for(const r of game.world){r.motes=[];for(const e of r.enemies)e.hp=0}place(bloom.room,bloom.x,bloom.y+35);game.state[bloom.needs]=false;
   run(.01);assert.equal(game.state.discoveries.includes(bloom.id),false);tap('KeyE');assert.equal(game.state.discoveries.includes(bloom.id),false);
-  game.state[bloom.needs]=true;const light=game.state.light;tap('KeyE');assert.equal(game.state.discoveries.includes(bloom.id),true);assert.equal(game.state.light,light+20);tap('KeyE');assert.equal(game.state.light,light+20);
- }assert.equal(game.state.discoveries.length,4);game.start(true);assert.equal(game.state.discoveries.length,4);assert.equal(game.state.light,80);assert.equal(game.state.seeds.length,0);
- const bloom=memoryBlooms[0];game.world[0].motes=[];place(0,bloom.x,bloom.y+35);tap('KeyE');assert.equal(game.state.light,80);
+  if(bloom.id==='ember-heart')game.broken.add(130);game.state[bloom.needs]=true;const light=game.state.light;tap('KeyE');assert.equal(game.state.discoveries.includes(bloom.id),true);assert.equal(game.state.light,light+20);tap('KeyE');assert.equal(game.state.light,light+20);
+ }assert.equal(game.state.discoveries.length,5);game.start(true);assert.equal(game.state.discoveries.length,5);assert.equal(game.state.light,100);assert.equal(game.state.seeds.length,0);
+ const bloom=memoryBlooms[0];game.world[0].motes=[];place(0,bloom.x,bloom.y+35);tap('KeyE');assert.equal(game.state.light,100);
 });
 check('Memories reject distant interactions and do not change the active Sunwell',()=>{
  game.start();game.state.doubleJump=true;const checkpoint={...game.checkpoint};place(0,875,705);tap('KeyE');assert.equal(game.state.discoveries.length,0);assert.deepEqual(game.checkpoint,checkpoint);
@@ -456,6 +458,11 @@ function rideTo(currentX,topY,landingX,landingY){
  }
  game.keys.clear();run(.1);assert.ok(game.player.grounded&&Math.abs(game.player.y-landingY)<3,`Current landing ${landingX},${landingY}; got ${game.player.x},${game.player.y}`);
 }
+
+function shatterSeal(q){
+ walkToward(q.x-60,2);game.input('ArrowRight',true);tap('ShiftLeft');run(.17);game.input('ArrowRight',false);game.input('ArrowLeft',true);run(.15);game.keys.clear();run(.05);assert.ok(game.broken.has(q.id),`Seal ${q.id} shattered`);
+}
+
 function driveFallsTrial(){
  const r=game.world[9];
  rideTo(700,170,690,230);tap('KeyE');assert.ok(game.state.discoveries.includes('river-heart'));
@@ -469,7 +476,7 @@ check('All six traversal trials have physically playable routes to their beacons
   if(stage===1){driveFallsTrial();continue;}
   // Trials keep three ground islands followed by their hand-authored stepping stones.
   const target=r.platforms.findIndex(p=>r.beacon.x>=p.x&&r.beacon.x<=p.x+p.w&&Math.abs(p.y-r.beacon.y-40)<3);
-  for(const plat of r.platforms.slice(0,target+1).filter(p=>p.y<700))jumpTo(plat,stage>=2);
+  for(const plat of r.platforms.slice(0,target+1).filter(p=>p.y<700)){jumpTo(plat,stage>=2);if(stage===2){const q=hollow.crystalSeals[12].find(q=>q.y+q.h===plat.y);if(q)shatterSeal(q);}}
   walkToward(r.beacon.x,1);tap('KeyE');assert.ok(game.state.beacons.includes(`${stage}:1`),`Stage ${stage} trial beacon`);for(const plat of r.platforms.slice(target+1).filter(p=>p.y<700))jumpTo(plat,stage>=2);walkToward(2310,8);run(.6);assert.ok(Math.abs(game.player.x-2310)<30);assert.equal(game.player.y,705);assert.equal(game.state.health,5);
  }
 });
@@ -482,7 +489,7 @@ check('All gauntlet terraces and their high beacon are reachable before the boss
 });
 
 check('Early exploration beacons are reachable with the movement available at that stage',()=>{
- for(const stage of [0,1,3]){game.start();unlock(stage);game.state.doubleJump=stage>=2;const r=game.world[stage];r.enemies=[];place(stage,230);const target=r.platforms.findIndex(p=>r.beacon.x>p.x&&r.beacon.x<p.x+p.w&&Math.abs(p.y-r.beacon.y-40)<3);for(const plat of r.platforms.slice(0,target+1).filter(p=>p.y<700))jumpTo(plat,stage>=2);walkToward(r.beacon.x,1);tap('KeyE');assert.ok(game.state.beacons.includes(`${stage}:0`));assert.equal(game.state.health,5)}
+ for(const stage of [0,1,3]){game.start();unlock(stage);game.state.doubleJump=stage>=2;const r=game.world[stage];r.enemies=[];place(stage,230);const target=r.platforms.findIndex(p=>r.beacon.x>p.x&&r.beacon.x<p.x+p.w&&Math.abs(p.y-r.beacon.y-40)<3);for(const plat of r.platforms.slice(0,target+1).filter(p=>p.y<700)){jumpTo(plat,stage>=2);if(stage===2){const q=hollow.crystalSeals[12].find(q=>q.y+q.h===plat.y);if(q)shatterSeal(q);}}walkToward(r.beacon.x,1);tap('KeyE');assert.ok(game.state.beacons.includes(`${stage}:0`));assert.equal(game.state.health,5)}
 });
 
 check('The first guardian is beatable with five hearts, ordinary jumps, and no invulnerability override',()=>{
@@ -656,6 +663,50 @@ check('Tidewing can be defeated with five hearts, currents, Sun Dash, and no imm
   run(1/120);
  }
  assert.equal(e.hp,0,`Tidewing HP ${e.hp}, player ${game.state.health}, room ${game.state.room}`);assert.ok(game.state.bosses.includes(1));assert.equal(game.state.doubleJump,false);
+});
+
+
+check('Crystal seals stop walking, shatter under a real dash, and persist through reload',()=>{
+ game.start();unlock(2);game.state.dash=true;place(12,910,415);game.world[12].enemies=[];const q=hollow.crystalSeals[12][0];game.input('ArrowRight',true);run(.6);assert.ok(game.player.x<q.x);assert.equal(game.broken.has(120),false);game.keys.clear();shatterSeal(q);game.save();game.start(true);assert.ok(game.broken.has(120));
+ const save=JSON.parse(storage.get('luma-sunseed-v1'));save.broken=[2,120,121,130,999,'120',null];storage.set('luma-sunseed-v1',JSON.stringify(save));game.start(true);assert.deepEqual([...game.broken],[2,120,121,130]);game.start();assert.equal(game.broken.size,0);
+});
+check('Swept seal collisions catch a dash that crosses the whole formation in one step',()=>{
+ game.start();place(12,1100,415);game.dashTime=.1;game.updateCrystalSeals(900,415);assert.ok(game.broken.has(120));
+});
+check('The Ember Veins beacon requires both seals and preserves already earned beacon progress',()=>{
+ game.start();unlock(2);place(12,1770,370);assert.equal(game.activateBeacon(),true);assert.equal(game.state.beacons.includes('2:1'),false);game.broken.add(120);game.activateBeacon();assert.equal(game.state.beacons.includes('2:1'),false);game.broken.add(121);game.activateBeacon();assert.ok(game.state.beacons.includes('2:1'));game.save();game.start(true);assert.ok(game.state.beacons.includes('2:1'));
+});
+check('Emberheart alcove is reachable by real jumps and a dash; its seal must be broken to claim it',()=>{
+ game.start();unlock(2);game.state.doubleJump=true;game.state.dash=true;const r=game.world[13];r.enemies=[];r.hazards=[];place(13,230);
+ for(const plat of r.platforms.slice(1,5))jumpTo(plat,true);jumpTo(r.platforms.at(-1),true);shatterSeal(hollow.crystalSeals[13][0]);walkToward(1980,2);tap('KeyE');assert.ok(game.state.discoveries.includes('ember-heart'));assert.equal(game.state.health,5);
+ game.state.discoveries=[];game.broken.delete(130);place(13,1980,260);tap('KeyE');assert.equal(game.state.discoveries.includes('ember-heart'),false);
+});
+check('Emberheart increases only a recovering guardian finisher and survives save/resume',()=>{
+ game.start();prepare(2);place(14,1400);game.state.discoveries=['ember-heart'];game.save();game.start(true);assert.ok(game.state.discoveries.includes('ember-heart'));place(14,1400);const e=game.world[14].enemies[0];e.hp=20;e.mode='recover';game.combo=3;game.strikeEnemy(e);assert.equal(e.hp,17);e.mode='attack';game.strikeEnemy(e);assert.equal(e.hp,17);e.mode='recover';game.combo=1;game.strikeEnemy(e);assert.equal(e.hp,16);
+});
+check('Amberback crashes into formations from either direction and exposes a longer counter window',()=>{
+ for(const direction of [-1,1]){game.start();prepare(2);place(14,1400);const e=game.world[14].enemies[0];game.encounter=14;e.x=1080-direction*95;e.y=645;e.pattern='charge';e.mode='attack';e.direction=direction;e.timer=.65;e.motionDuration=.75;const health=game.state.health;game.updateBoss(e,.2);assert.equal(e.mode,'recover');assert.equal(e.timer,3.2);assert.equal(e.x,1080-direction*48);assert.equal(game.amberRegrowth.get(1080),9);assert.equal(game.state.health,health);assert.equal(e.hp,e.maxHp);}
+});
+check('Arena formations regrow after their cooldown and reset on defeat without erasing trail seals',()=>{
+ game.start();prepare(2);place(14,1000);game.encounter=14;const e=game.world[14].enemies[0];game.amberRegrowth.set(1080,.1);e.mode='recover';e.timer=3;game.updateBoss(e,.2);assert.equal(game.amberRegrowth.get(1080),0);game.amberRegrowth.set(1080,8);game.broken.add(120);game.state.health=1;game.hurt(false);assert.equal(game.amberRegrowth.size,0);assert.ok(game.broken.has(120));assert.equal(e.hp,e.maxHp);
+});
+check('Gentle Journey extends the crystal crash opening and reduced motion removes the shake',()=>{
+ game.setPreferences({...prefs.defaultPreferences(),assist:true,motion:'reduced'});game.start();prepare(2);place(14,950);game.encounter=14;const e=game.world[14].enemies[0];e.x=1150;e.mode='attack';e.pattern='charge';e.direction=-1;e.timer=.6;e.motionDuration=.75;game.updateBoss(e,.2);assert.equal(e.mode,'recover');assert.equal(e.timer,3.2*1.4);assert.equal(game.shake,0);game.setPreferences(prefs.defaultPreferences());
+});
+
+
+check('Amberback is beatable with five hearts and crystal baiting without an immunity override',()=>{
+ game.start();prepare(2);place(14,1000);game.state.dash=true;game.state.doubleJump=true;const e=game.world[14].enemies[0];let jumpHeld=0,crashes=0,previous=0;
+ for(let frame=0;frame<120*180&&e.hp>0&&game.state.room===14;frame++){
+  jumpHeld=Math.max(0,jumpHeld-1/120);
+  if(e.mode==='windup'&&e.pattern==='charge'&&e.timer<.22&&game.player.grounded)jumpHeld=.65;
+  let goal=e.mode==='windup'&&e.pattern==='charge'?1010:e.x-85;
+  if(e.pattern==='eruption'&&(e.mode==='windup'||e.mode==='attack'||game.bossHazards.length))goal=e.aimX<1600?e.aimX+430:e.aimX-430;
+  if(game.player.grounded&&game.player.y<705){const plat=game.world[14].platforms.find(p=>p.y===game.player.y&&game.player.x>=p.x&&game.player.x<=p.x+p.w);if(plat)goal=plat.x-40;}
+  const delta=goal-game.player.x;game.input('ArrowRight',delta>12);game.input('ArrowLeft',delta< -12);game.input('Space',jumpHeld>0);game.input('KeyJ',frame%45===0);game.input('ShiftLeft',e.mode==='recover'&&Math.abs(delta)>200&&game.dashCooldown<=0&&frame%30===0);run(1/120);
+  const cooldown=[...game.amberRegrowth.values()].reduce((a,b)=>a+b,0);if(cooldown>previous)crashes++;previous=cooldown;
+ }
+ assert.equal(e.hp,0,`Amberback HP ${e.hp}, player ${game.state.health}, room ${game.state.room}`);assert.ok(game.state.bosses.includes(2));assert.ok(crashes>0,'At least one formation must actually be baited');
 });
 
 game.destroy();console.log(`\n${tests} gameplay checks passed.`);

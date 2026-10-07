@@ -43,3 +43,5 @@ Original painted scenery generated with the built-in image generation tool:
 - `environment-props.webp`: ancient tree, ruined pillar, mushroom grove, seed-lantern beacon, root-wrapped sunwell and amber brambles.
 
 Full prompts, asset locations and integration details: `docs/art/environment-prompts.md`.
+
+- `environment-crystals.webp`: original painted amber seals, arena formations, shattered stumps, and regrowing sprouts, created with the built-in image generation tool. Alpha preserved in the WebP conversion. Full prompt: `docs/art/amber-crystal-prompts.md`.

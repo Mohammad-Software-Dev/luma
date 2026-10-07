@@ -1,3 +1,4 @@
+import { crystalSeals, validBrokenIds, EMBERHEART, amberFormations, amberCrash, sweptFormation, trailSealsRemaining } from './hollow';
 import { fallsCurrents, currentState, ridingCurrent, RIVERHEART, tideSurge } from './falls';
 import { chooseBossPattern, bossChoreography, smoothStep } from './encounters';
 import { Environment } from './environment';
@@ -61,6 +62,7 @@ function rooms():Room[]{
   const guardian=enemy(1530,645,680,'keeper');guardian.boss=stage;guardian.cycle=0;guardian.hp=guardian.maxHp=stages[stage].hp;
   r.push({name:stages[stage].arena,tint:base.tint,stage,part:3,platforms:[ground(0,2400),rect(850,550,220),rect(1220,435,240),rect(1760,550,220)],doors:[{x:85,y:705,to:ids[2],label:stages[stage].gauntlet},...(stage<5?[{x:2310,y:705,to:stage+1,label:stages[stage+1].name,boss:stage}]:[])],enemies:[guardian],motes:[],shrine:230});
  }
+ r[13].platforms.push(rect(1780,260,280));
  r.forEach((room,ri)=>{room.enemies.forEach((e,ei)=>e.id=`${ri}-${ei}`);room.platforms.forEach((p,pi)=>{if(p.y<700){for(let i=0;i<3;i++)room.motes.push({x:p.x+45+i*(p.w-90)/2,y:p.y-38,id:`${ri}-${pi}-${i}`})}});for(let i=0;i<7;i++)room.motes.push({x:430+i*270,y:653,id:`${ri}-g-${i}`})});return r;
 }
 
@@ -69,6 +71,7 @@ export const memoryBlooms=[
  {id:'brook-song',room:0,x:875,y:415,needs:'doubleJump' as const,name:'The Brook’s First Song',hint:'Above the first brook, a quiet bud waits for a skyward leap.',memory:'Before the forest grew sleepy, the brook taught every young leaf to dance.'},
  {id:'waterfall-wish',room:1,x:1000,y:420,needs:'dash' as const,name:'A Waterfall Wish',hint:'Climb above the falls. A golden bud answers the light of Sun Dash.',memory:'A tiny guardian once wished on the falling water. The forest has kept that wish warm.'},
  {id:RIVERHEART,room:9,x:690,y:190,needs:'dash' as const,name:'The Riverheart',hint:'Ride the western current in the Spillway to a sheltered alcove above the trail.',memory:'The river carries those who listen. Sun Dash now recovers twice as fast while you ride a current.'},
+ {id:EMBERHEART,room:13,x:1980,y:220,needs:'dash' as const,name:'The Emberheart',hint:'Above Crystal Ascent’s eastern terrace, dash through the amber seal to wake a sleeping heart.',memory:'The mountain remembers your courage. Your third combo strike deals one extra damage to a recovering guardian.'},
  {id:'wind-lullaby',room:3,x:1730,y:350,needs:'doubleJump' as const,name:'The Wind’s Lullaby',hint:'Seek the highest eastern branch, where the wind rests between songs.',memory:'The canopy sways to an old lullaby. Even the bravest little lights need a place to rest.'}
 ];
 export type Blessing='heart'|'magnet';
@@ -95,7 +98,7 @@ export function journeyObjective(state:Pick<Snapshot,'room'|'dash'|'doubleJump'|
  else if(stage===1&&!state.dash){target=1;title='Awaken Sun Dash.';detail='Find the golden light near the eastern passage.'}
  else if(stage===2&&!state.doubleJump){target=2;title='Find the Sky Feather.';detail='Dash through the amber thorns, then jump onto the first high ledge.'}
  else {const part=[0,1,2].find(n=>!state.beacons.includes(beaconId(stage,n)));
-  if(part!==undefined){target=ids[part];title=`Light the ${['exploration','trial','gauntlet'][part]} beacon.`;detail=stage===1?(part===0?'Hold jump inside the pale currents to ride upward. Find the beacon above the falls.':part===1?'Ride the pulsing current, then dash onto the high beacon shelf. A western alcove holds the Riverheart.':'Ride the current to reach the high sentry. Clear every creature and light the beacon.'):part===0?'Find the golden beacon above the main trail, and interact beside it.':part===1?'Cross the shifting platforms and timed hazards. Find and activate the trail beacon.':'Climb the terraces, awaken every creature in the gauntlet, and activate its beacon.'}
+  if(part!==undefined){target=ids[part];title=`Light the ${['exploration','trial','gauntlet'][part]} beacon.`;detail=stage===2?(part===0?'Climb the crystal shelves and awaken the beacon.':part===1?'Sun Dash through both crystal seals on the high route, then light the beacon.':"Clear the terraces and light the beacon. A sealed alcove above the eastern ledge holds the Emberheart."):stage===1?(part===0?'Hold jump inside the pale currents to ride upward. Find the beacon above the falls.':part===1?'Ride the pulsing current, then dash onto the high beacon shelf. A western alcove holds the Riverheart.':'Ride the current to reach the high sentry. Clear every creature and light the beacon.'):part===0?'Find the golden beacon above the main trail, and interact beside it.':part===1?'Cross the shifting platforms and timed hazards. Find and activate the trail beacon.':'Climb the terraces, awaken every creature in the gauntlet, and activate its beacon.'}
   else {target=ids[3];title=`Face ${stages[stage].boss}.`;detail=stages[stage].hint+' Clear every gauntlet creature to open the arena.'}
  }
  if(areaPart(state.room)===2&&state.beacons.includes(beaconId(stage,2))&&state.enemiesLeft>0){target=state.room;title=`Awaken ${state.enemiesLeft} remaining gauntlet creatures.`;detail='Every creature here must be awakened before the arena opens. Climb the terraces to find the sentries.'}
@@ -115,6 +118,7 @@ export class Game {
  ready:Promise<void>;state:Snapshot={room:0,roomName:'The Waking Glade',bosses:[],beacons:[],bossName:'',stage:0,part:0,enemiesLeft:0,health:5,maxHealth:5,heartLevel:0,magnet:false,discoveries:[],light:0,seeds:[],dash:false,doubleJump:false,visited:[0],shrines:[0],canTravel:false,time:0,won:false,message:'',controller:false,dashCharge:1,bossHealth:null,bossMaxHealth:8,bossIntent:'',combo:0,animation:'idle'};
  private visuals=new CombatVisuals();
  private environment=new Environment();
+ private amberRegrowth=new Map<number,number>();
  private glowSprites=new Map<string,HTMLCanvasElement>();
  private preferences=readPreferences();private keyboardHeld=new Map<string,ControlAction>();private motionQuery:MediaQueryList|undefined;private musicBus:GainNode|null=null;private effectsBus:GainNode|null=null;
  private encounter:number|null=null;private bossHazards:Array<{x:number;timer:number;life:number;w:number;fired:boolean}>=[];private strikeBuffer=0;private combatTexts:CombatText[]=[];private respawns=0;private backdrops:HTMLImageElement[]=[];private runSheet=new Image();private padKeys=new Set<string>();private padPressed=new Set<string>();private padMenus=new Set<MenuAction>();private activePad:Gamepad|null=null;private gamepadActive=false;private projectiles:Projectile[]=[];private defeated=new Set<string>();private swingHits=new Set<string>();private combo=0;private comboWindow=0;private hitStop=0;private knockback=0;private landing=0;private runCycle=0;private stepDistance=0;private lastFacing=1;private reducedMotion=false;private backdropLoads=new Map<number,Promise<void>>();
@@ -181,8 +185,8 @@ export class Game {
  }catch{return null}}
 
  start(resume=false){
-  this.clearInput();this.visuals.reset();this.world=rooms();this.collected.clear();this.broken.clear();this.defeated.clear();this.particles=[];this.projectiles=[];this.bossHazards=[];this.encounter=null;this.swingHits.clear();this.combo=0;this.comboWindow=0;this.strikeBuffer=0;this.combatTexts=[];this.hitStop=0;this.landing=0;this.knockback=0;this.runCycle=0;this.stepDistance=0;this.lastPublish=0;this.state={room:0,roomName:'The Waking Glade',bosses:[],beacons:[],bossName:'',stage:0,part:0,enemiesLeft:0,health:5,maxHealth:5,heartLevel:0,magnet:false,discoveries:[],light:0,seeds:[],dash:false,doubleJump:false,visited:[0],shrines:[0],canTravel:false,time:0,won:false,message:'',controller:false,dashCharge:1,bossHealth:null,bossMaxHealth:8,bossIntent:'',combo:0,animation:'idle'};this.checkpoint={room:0,x:230,y:705};
-  const s=resume?this.readSave():null;if(s){this.state={...this.state,room:s.room,bosses:s.bosses,beacons:s.beacons,heartLevel:s.heartLevel,maxHealth:5+s.heartLevel,health:5+s.heartLevel,magnet:s.magnet,discoveries:s.discoveries,seeds:[...new Set<number>(s.seeds)],dash:!!s.dash,doubleJump:!!s.doubleJump,light:Number.isFinite(s.light)?Math.max(0,Math.min(1000000,Math.floor(s.light))):0,visited:s.visited.filter((n:number)=>Number.isInteger(n)&&n>=0&&n<this.world.length&&unlockedStage(s,areaStage(n))),shrines:s.shrines,won:!!s.won&&s.bosses.length===6,time:Number.isFinite(s.time)?Math.max(0,s.time):0};this.collected=new Set(s.collected.filter((n:unknown)=>typeof n==='string'));this.broken=new Set(Array.isArray(s.broken)?s.broken.filter((n:unknown)=>n===2):[]);this.defeated=new Set(Array.isArray(s.defeated)?s.defeated.filter((n:unknown)=>typeof n==='string'):[]);for(const room of this.world)for(const e of room.enemies)if(e.boss!==undefined?this.state.bosses.includes(e.boss):this.defeated.has(e.id))e.hp=0;if(s.checkpoint&&Number.isInteger(s.checkpoint.room)&&s.checkpoint.room>=0&&s.checkpoint.room<this.world.length&&Number.isFinite(s.checkpoint.x))this.checkpoint=s.checkpoint;}
+  this.clearInput();this.visuals.reset();this.world=rooms();this.collected.clear();this.broken.clear();this.amberRegrowth.clear();this.defeated.clear();this.particles=[];this.projectiles=[];this.bossHazards=[];this.encounter=null;this.swingHits.clear();this.combo=0;this.comboWindow=0;this.strikeBuffer=0;this.combatTexts=[];this.hitStop=0;this.landing=0;this.knockback=0;this.runCycle=0;this.stepDistance=0;this.lastPublish=0;this.state={room:0,roomName:'The Waking Glade',bosses:[],beacons:[],bossName:'',stage:0,part:0,enemiesLeft:0,health:5,maxHealth:5,heartLevel:0,magnet:false,discoveries:[],light:0,seeds:[],dash:false,doubleJump:false,visited:[0],shrines:[0],canTravel:false,time:0,won:false,message:'',controller:false,dashCharge:1,bossHealth:null,bossMaxHealth:8,bossIntent:'',combo:0,animation:'idle'};this.checkpoint={room:0,x:230,y:705};
+  const s=resume?this.readSave():null;if(s){this.state={...this.state,room:s.room,bosses:s.bosses,beacons:s.beacons,heartLevel:s.heartLevel,maxHealth:5+s.heartLevel,health:5+s.heartLevel,magnet:s.magnet,discoveries:s.discoveries,seeds:[...new Set<number>(s.seeds)],dash:!!s.dash,doubleJump:!!s.doubleJump,light:Number.isFinite(s.light)?Math.max(0,Math.min(1000000,Math.floor(s.light))):0,visited:s.visited.filter((n:number)=>Number.isInteger(n)&&n>=0&&n<this.world.length&&unlockedStage(s,areaStage(n))),shrines:s.shrines,won:!!s.won&&s.bosses.length===6,time:Number.isFinite(s.time)?Math.max(0,s.time):0};this.collected=new Set(s.collected.filter((n:unknown)=>typeof n==='string'));this.broken=new Set(Array.isArray(s.broken)?s.broken.filter((n:unknown)=>typeof n==='number'&&validBrokenIds.includes(n)):[]);this.defeated=new Set(Array.isArray(s.defeated)?s.defeated.filter((n:unknown)=>typeof n==='string'):[]);for(const room of this.world)for(const e of room.enemies)if(e.boss!==undefined?this.state.bosses.includes(e.boss):this.defeated.has(e.id))e.hp=0;if(s.checkpoint&&Number.isInteger(s.checkpoint.room)&&s.checkpoint.room>=0&&s.checkpoint.room<this.world.length&&Number.isFinite(s.checkpoint.x))this.checkpoint=s.checkpoint;}
   this.player={x:s?this.checkpoint.x:230,y:705,vx:0,vy:0,face:1,grounded:true};this.state.room=s?this.checkpoint.room:0;this.state.roomName=this.world[this.state.room].name;if(!this.state.visited.includes(this.state.room))this.state.visited.push(this.state.room);this.safe={x:this.player.x,y:705};this.camera=Math.max(0,this.player.x-this.viewport*.35);this.invincible=0;this.attack=0;this.attackCooldown=0;this.dashTime=0;this.dashCooldown=0;this.transition=0;this.coyote=.1;this.jumpBuffer=0;this.usedDouble=false;this.started=true;this.paused=false;
   try{if(!this.audio||this.audio.state==='closed'){this.audio=new AudioContext();this.musicBus=this.audio.createGain();this.effectsBus=this.audio.createGain();this.musicBus.connect(this.audio.destination);this.effectsBus.connect(this.audio.destination);this.applyAudioPreferences();}if(!this.mute)this.audio.resume().catch(()=>{})}catch{}
   this.toast(s?.legacy?'A bigger adventure awaits! Your rewards are safe. Begin the six-stage campaign at the Glade.':s?'Welcome back, little light.':'Light the high trail beacon, then follow the eastern passage. Six guardians await.');this.save();this.publish();
@@ -223,6 +227,7 @@ export class Game {
   p.y+=p.vy*dt;p.grounded=false;
   for(const plat of r.platforms){if(p.x+18>plat.x&&p.x-18<plat.x+plat.w&&p.vy>=0&&oldY<=plat.y+2&&p.y>=plat.y){if(!wasGrounded&&p.vy>230){this.landing=.15;this.visuals.emit('land',p.x,plat.y);this.burst(p.x,plat.y,8,'#d6d3a0');this.tone(110,.06,'triangle',.015)}p.y=plat.y;p.vy=0;p.grounded=true;this.coyote=.12;this.usedDouble=false;if(plat.y===705&&!r.hazards?.some(h=>Math.abs(p.x-h.x)<h.w+30)){this.safe={x:p.x,y:p.y}}}}
   if(this.state.room===2&&!this.broken.has(2)&&p.x+18>590&&p.x-18<635&&p.y>430){if(this.dashTime>0){this.broken.add(2);this.burst(612,580,55,'#ffc478');this.shake=this.reducedMotion?0:8;this.toast('A new path opens. Keep growing, little light.');this.save()}else{p.x=oldX<610?571:654;p.vx=0;if(this.tap('KeyE','ArrowDown'))this.toast(`Amber thorns yield to Sun Dash. Press ${keyLabel(this.preferences.bindings.dash)}.`)}}
+  this.updateCrystalSeals(oldX,oldY);
   p.x=Math.max(25,Math.min(W-25,p.x));
   if(p.y>H+130){this.hurt(true);this.pressed.clear();return}
   const respawns=this.respawns;this.updateHazards(dt);if(this.respawns!==respawns){this.clearInput();return}this.updateEnemies(dt);if(this.respawns!==respawns){this.clearInput();return}this.updateProjectiles(dt);if(this.respawns!==respawns){this.clearInput();return}
@@ -246,9 +251,19 @@ export class Game {
   if(this.state.time-this.lastPublish>.1){this.lastPublish=this.state.time;this.publish()}
   this.pressed.clear();this.padPressed.clear();
  }
+ private updateCrystalSeals(oldX:number,oldY:number){
+  const p=this.player;
+  for(const q of crystalSeals[this.state.room]||[]){
+   if(this.broken.has(q.id)||!crossesPlatform(oldX,oldY-30,p.x,p.y-30,q,18))continue;
+   if(this.dashTime>0){this.broken.add(q.id);this.visuals.emit('hit',q.x+q.w/2,q.y+q.h/2,2);this.burst(q.x+q.w/2,q.y+q.h/2,30,'#ffd095');this.shake=this.reducedMotion?0:4;this.tone(170,.18,'triangle',.04);
+    this.toast(this.state.room===12?`Crystal seal shattered · ${2-trailSealsRemaining(this.broken)} / 2. ${trailSealsRemaining(this.broken)?'Follow the high path to the second seal.':'The beacon is ready to awaken.'}`:'A hidden heart waits beyond the broken crystal.');this.save();
+   }else{p.x=oldX<q.x+q.w/2?q.x-19:q.x+q.w+19;p.vx=0;}
+  }
+ }
  private activateBeacon(){
   const r=this.world[this.state.room],b=r.beacon,id=beaconId(areaStage(this.state.room),areaPart(this.state.room));
   if(!b||this.state.beacons.includes(id)||Math.hypot(b.x-this.player.x,b.y-(this.player.y-35))>85)return false;
+  if(this.state.room===12&&trailSealsRemaining(this.broken)>0){this.toast(`Shatter both crystal seals with Sun Dash first · ${2-trailSealsRemaining(this.broken)} / 2.`);return true;}
   this.state.beacons.push(id);this.state.light+=10;this.burst(b.x,b.y,50,'#fff1b4');this.chime();this.toast(`Trail beacon ${stageBeacons(this.state,areaStage(this.state.room))} / 3 lit · +10 light. ${stageBeacons(this.state,areaStage(this.state.room))===3?'Clear the gauntlet to reach the guardian.':'The next challenge awaits.'}`);this.save();this.publish();return true;
  }
  private doorBlocked(door:Door){
@@ -260,7 +275,7 @@ export class Game {
  private bossActive(){return this.encounter!==null}
  private resetBosses(){
   for(const room of this.world)for(const e of room.enemies)if(e.boss!==undefined&&!this.state.bosses.includes(e.boss)){e.hp=e.maxHp;e.x=e.home;e.y=645;e.mode='patrol';e.timer=.6;e.cycle=0;e.enraged=false;e.hit=0;e.phaseLevel=1;e.shots=0;e.recoil=0;e.fromX=undefined;e.fromY=undefined;e.toX=undefined;e.toY=undefined}
-  this.encounter=null;this.bossHazards=[];
+  this.encounter=null;this.bossHazards=[];this.amberRegrowth.clear();
  }
  private completeStage(e:Enemy){
   const stage=e.boss!;if(!this.state.bosses.includes(stage))this.state.bosses.push(stage);
@@ -308,7 +323,7 @@ export class Game {
   e.shots=shot+1;
  }
  private updateBoss(e:Enemy,dt:number){
-  const stage=e.boss!,p=this.player;e.hit=Math.max(0,e.hit-dt);e.recoil=Math.max(0,(e.recoil||0)-dt);e.phase+=dt;
+  const stage=e.boss!,p=this.player;if(stage===2)for(const [x,time] of this.amberRegrowth)this.amberRegrowth.set(x,Math.max(0,time-dt));e.hit=Math.max(0,e.hit-dt);e.recoil=Math.max(0,(e.recoil||0)-dt);e.phase+=dt;
   if(this.encounter===null){if(p.x<650)return;this.encounter=this.state.room;e.timer=.5;this.toast(`${stages[stage].boss} · ${stages[stage].hint}`)}
   p.x=Math.max(590,Math.min(2190,p.x));e.timer=Math.max(0,e.timer-dt);
   const profile=bossAttack(stage,e.cycle||0,e.hp,e.maxHp,this.preferences.assist),phase=profile.phase;
@@ -334,7 +349,10 @@ export class Game {
    if(e.pattern!=='slam'&&e.pattern!=='charge')this.bossVolley(e);
   }else if(e.mode==='attack'){
    const move=bossChoreography(stage,e.pattern!),u=Math.min(1,1-e.timer/(e.motionDuration||move.active));
-   if(e.pattern==='charge'){const accelerate=Math.min(1,.3+u*3.5),brake=u>.82?Math.max(.25,(1-u)/.18):1;e.x=Math.max(800,Math.min(2040,e.x+e.direction*profile.chargeSpeed*accelerate*brake*dt));}
+   if(e.pattern==='charge'){const before=e.x,accelerate=Math.min(1,.3+u*3.5),brake=u>.82?Math.max(.25,(1-u)/.18):1;e.x=Math.max(800,Math.min(2040,e.x+e.direction*profile.chargeSpeed*accelerate*brake*dt));
+    const formation=stage===2?amberFormations.find(x=>(this.amberRegrowth.get(x)||0)<=0&&sweptFormation(before,e.x,x)):undefined;
+    if(formation!==undefined){this.amberRegrowth.set(formation,amberCrash.regrow);e.x=formation-e.direction*48;e.mode='recover';e.timer=amberCrash.recovery*(this.preferences.assist?1.4:1);e.cycle=(e.cycle||0)+1;e.hit=.28;e.recoil=.24;this.bossHazards=[];this.visuals.emit('hit',formation,630,2);this.burst(formation,630,30,'#ffce87');this.combatText(formation,470,'CRACKED · STRIKE NOW');this.shake=this.reducedMotion?0:5;this.tone(110,.22,'triangle',.05);this.publish();return;}
+   }
    else if(e.pattern==='surge'){e.y=440;if(p.y>tideSurge.waterline+20&&this.dashTime<=0){const before=this.respawns;this.hurt(false);if(this.respawns!==before)return;}}
    else if(e.pattern==='slam'||stage===3&&e.pattern==='fan'){
     e.x=(e.fromX??e.x)+((e.toX??e.x)-(e.fromX??e.x))*smoothStep(u);e.y=(e.fromY??645)+(645-(e.fromY??645))*u-Math.sin(Math.PI*u)*move.leap;
@@ -352,6 +370,11 @@ export class Game {
  }
  private drawChallenges(t:number){
   const c=this.ctx,r=this.world[this.state.room],b=r.beacon;
+  for(const q of crystalSeals[this.state.room]||[]){
+   const broken=this.broken.has(q.id);this.environment.crystal(c,q.x+q.w/2,q.y+q.h,q.w+28,q.h,broken,false);
+   if(!broken&&Math.abs(this.player.x-q.x)<260)this.label((this.state.controller?'B / RB':keyLabel(this.preferences.bindings.dash))+' · SHATTER',q.x+q.w/2,q.y-20,'#ffe1a4',12);
+  }
+  if(this.state.room===14&&!this.state.bosses.includes(2))for(const x of amberFormations){const cooldown=this.amberRegrowth.get(x)||0;this.environment.crystal(c,x,705,88,155,cooldown>0,cooldown>0&&cooldown<2);if(Math.abs(this.player.x-x)<300&&(cooldown===0||cooldown<2))this.label(cooldown>0?'CRYSTAL REGROWING':'BAIT A CHARGE',x,515,'#ffdfa5',12);}
   for(const q of fallsCurrents[this.state.room]||[]){
    const phase=currentState(q,this.state.time);this.environment.current(c,q,phase,t,this.reducedMotion);
    if(Math.abs(this.player.x-(q.x+q.w/2))<210)this.label(phase==='resting'?'CURRENT RESTING':phase==='rising'?'CURRENT RISING':`${this.state.controller?'A':keyLabel(this.preferences.bindings.jump)} · HOLD TO RIDE / RELEASE TO LAND`,q.x+q.w/2,q.y-18,'#c7fbef',11);
@@ -376,8 +399,9 @@ export class Game {
  private discoverMemory(){
   const bloom=memoryBlooms.find(b=>b.room===this.state.room&&!this.state.discoveries.includes(b.id)&&Math.hypot(b.x-this.player.x,b.y-(this.player.y-35))<72);
   if(!bloom)return false;
+  if(bloom.id===EMBERHEART&&!this.broken.has(130)){this.toast('Dash through the amber seal to awaken this heart.');return true;}
   if(!this.state[bloom.needs]){this.toast(bloom.needs==='dash'?'This memory bud needs the warmth of Sun Dash.':'A Sky Feather will help this quiet memory bloom.');return true}
-  this.state.discoveries.push(bloom.id);this.state.light+=20;this.burst(bloom.x,bloom.y,65,'#c5f3d7');this.chime();this.toast(bloom.id===RIVERHEART?'Riverheart awakened! Sun Dash recovers twice as fast while riding a current. +20 light.':`${bloom.name} · Memory ${this.state.discoveries.length} of ${memoryBlooms.length} · +20 light. Read its story on the map.`);this.save();this.publish();return true;
+  this.state.discoveries.push(bloom.id);this.state.light+=20;this.burst(bloom.x,bloom.y,65,'#c5f3d7');this.chime();this.toast(bloom.id===EMBERHEART?'Emberheart awakened! Your combo finisher deals +1 damage to recovering guardians. +20 light.':bloom.id===RIVERHEART?'Riverheart awakened! Sun Dash recovers twice as fast while riding a current. +20 light.':`${bloom.name} · Memory ${this.state.discoveries.length} of ${memoryBlooms.length} · +20 light. Read its story on the map.`);this.save();this.publish();return true;
  }
  openSunwell(){if(!this.started||this.state.won||!this.atSunwell())return false;this.setPaused(true);this.publish();this.onMenu('well');return true}
  buyBlessing(id:Blessing){
@@ -388,7 +412,7 @@ export class Game {
   this.burst(this.player.x,this.player.y-35,40,id==='heart'?'#ffe4b0':'#c5f3d7');this.toast(id==='heart'?`Heartwood grows. You now have ${this.state.maxHealth} hearts.`:'Glowkeeper awakened. Nearby light follows you.');this.save();this.publish();return true;
  }
  private settlePlayer(x:number,y=705,face=1){
-  this.clearInput();this.visuals.reset();this.encounter=null;this.projectiles=[];this.bossHazards=[];this.swingHits.clear();this.attack=0;this.attackCooldown=0;this.combo=0;this.comboWindow=0;this.strikeBuffer=0;this.combatTexts=[];this.dashTime=0;this.dashCooldown=0;this.usedDouble=false;this.hitStop=0;this.knockback=0;this.jumpBuffer=0;this.coyote=.12;this.landing=0;
+  this.clearInput();this.visuals.reset();this.amberRegrowth.clear();this.encounter=null;this.projectiles=[];this.bossHazards=[];this.swingHits.clear();this.attack=0;this.attackCooldown=0;this.combo=0;this.comboWindow=0;this.strikeBuffer=0;this.combatTexts=[];this.dashTime=0;this.dashCooldown=0;this.usedDouble=false;this.hitStop=0;this.knockback=0;this.jumpBuffer=0;this.coyote=.12;this.landing=0;
   this.player={x,y,vx:0,vy:0,face,grounded:true};this.safe={x,y};this.invincible=this.preferences.assist?2.4:1.6;this.state.bossHealth=null;this.state.bossIntent='';this.state.combo=0;this.state.animation='idle';this.state.dashCharge=1;this.camera=Math.max(0,Math.min(W-this.viewport,x-this.viewport*.4));this.transition=.6;void this.loadBackdrop(areaStage(this.state.room));
  }
  private enter(to:number){
@@ -440,9 +464,9 @@ export class Game {
    this.visuals.emit('guard',e.x-this.player.face*28,e.y,1);this.combatText(e.x+this.player.face*95,e.y-45,'GUARDED','#bcdce5');this.burst(e.x,e.y,8,'#bcdce5');this.tone(150,.09,'triangle',.03);return;
   }
   this.visuals.emit('hit',e.x-this.player.face*22,e.y,this.combo===3?2:1,this.combo===2?-.8:.4);
-  const damage=this.combo===3?2:1;e.hp=Math.max(0,e.hp-damage);
+  const damage=(this.combo===3?2:1)+(this.combo===3&&e.boss!==undefined&&e.mode==='recover'&&this.state.discoveries.includes(EMBERHEART)?1:0);e.hp=Math.max(0,e.hp-damage);
   if(e.kind!=='keeper'){e.mode='recover';e.timer=.65;e.x=Math.max(e.home-e.range-75,Math.min(e.home+e.range+75,e.x+this.player.face*24));}
-  this.combatText(e.x+(e.kind==='keeper'?this.player.face*95:0),e.y-45,e.hp<=0?'AWAKE':this.combo===3?'2 · FINISH':'1');
+  this.combatText(e.x+(e.kind==='keeper'?this.player.face*95:0),e.y-45,e.hp<=0?'AWAKE':this.combo===3?`${damage} · FINISH`:'1');
   this.hitStop=this.combo===3?.055:.035;this.shake=this.reducedMotion?0:this.combo===3?6:3;this.burst(e.x,e.y,this.combo===3?30:18,'#ffe8a4');this.rumble(this.combo===3?.25:.12,70);this.tone(this.combo===3?330:640,.09,'triangle',.035);
   if(e.kind==='keeper'&&e.hp>0&&e.hp<=e.maxHp/2&&!e.enraged){e.enraged=true;this.toast(e.boss!==undefined?`${stages[e.boss].boss} enters phase ${bossPhase(e.hp,e.maxHp,e.boss)}. Read its next warning.`:'The Keeper gathers more light. Watch for a wider fan.');this.burst(e.x,e.y,30,'#ffd58d');}
   if(e.hp<=0){this.visuals.emit('awake',e.x,e.y,e.boss!==undefined?2:1);e.defeat=.65;this.defeated.add(e.id);this.state.light+=e.boss!==undefined?40:e.kind==='keeper'?15:3;this.tone(880,.16,'sine',.05);if(e.boss!==undefined){this.completeStage(e)}else if(e.kind==='keeper'){this.projectiles=[];this.toast('The Keeper is awake. Its sunseed is yours.')}this.save();this.publish()}

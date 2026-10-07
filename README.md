@@ -66,9 +66,15 @@ Touch controls appear on touch devices. The toolbar offers help, saved mute, and
 ## Exploration, checkpoints, and upgrades
 
 - Rest at a Sunwell to heal, save a checkpoint, and activate travel. Open the map beside a lit Sunwell and select another lit Sunwell in an unlocked stage to travel there. Entering an area alone does not activate its checkpoint.
-- Four optional Memory Blooms wait above the brook, falls, Spillway, and canopy. The Spillway’s Riverheart also doubles Sun Dash recovery while riding a current. Return with movement upgrades and interact beside a bud to awaken it. Each grants 20 light and a story recorded on the map, which provides clues before discovery.
+- Five optional Memory Blooms wait above the brook, falls, Spillway, Crystal Ascent, and canopy. The Emberheart strengthens the third combo strike against recovering guardians. The Spillway’s Riverheart also doubles Sun Dash recovery while riding a current. Return with movement upgrades and interact beside a bud to awaken it. Each grants 20 light and a story recorded on the map, which provides clues before discovery.
 - Resting also opens the blessings menu. Heartwood costs 20 light for a sixth heart and 35 for a seventh. Glowkeeper costs 25 light and extends mote collection. Purchases require enough light and cannot be repeated after completion.
 - Beacons grant 10 light once. Abilities, discoveries, blessings, cleared creatures, beacons, and guardian victories persist through death and reload. Unfinished guardian fights restart at full health.
+
+## Amber Hollow showcase
+
+Ember Veins now requires two Sun Dash crystal seals to be shattered before its trial beacon awakens. Crystal Ascent adds a high, sealed side route to the optional Emberheart: 20 light and +1 damage on combo finishers against recovering guardians. Broken trail seals persist through death and saves.
+
+Amberback can smash into two arena formations when you bait its charge, exposing a 3.2-second counter window. Crystals regrow after nine seconds; jumps and positioning still matter between openings. Painted intact, shattered, and regrowing formations share the cavern’s amber palette. [Design and verification](docs/quality/amber-hollow.md).
 
 ## Layered environment
 
@@ -111,13 +117,14 @@ Starting a new journey resets adventure progress and retains device preferences.
 - `app/campaign.ts`: stage content, authored trials, shared gate rules, and boss attack profiles used by both behavior and warnings.
 - `app/environment.ts`, `app/scenery.ts`, and `app/environment-atlas.ts`: authored parallax compositions, cached terrain, organic interaction props and natural hazard effects.
 - `app/combat-visuals.ts`, `app/art-atlas.ts`, and `app/boss-action-atlas.ts`: shared swing timing, sprite poses, anatomical pivots, and bounded combat effects. `app/encounters.ts` defines boss movement and attack selection.
+- `app/hollow.ts`: authored crystal seals, Emberheart identity, arena formations, and crash/regrowth timing.
 - `app/falls.ts`: authored current locations, pulse timing, Riverheart identity, and Tidewing flood timing.
 - `app/game.ts`: fixed-step 120 Hz physics, enemies, hazards, moving platforms, rendering, audio, persistence, and progression.
 - `app/page.tsx`: React interface, guidance, pause menu, and touch input.
 - `app/world-map.tsx`: six-stage campaign map, four-area stage routes, memory clues, and Sunwell travel.
 - `app/preferences.ts`, `app/game-settings.tsx`, and `app/sunwell.tsx`: validated preferences, remapping, settings, and blessing purchases.
 - `public/forest.png`, `public/*.webp`, and guardian images: original generated environment and character artwork, extended with procedural animation and effects.
-- `tests/gameplay.mjs`: 113 deterministic checks with mocked browser APIs. Coverage includes campaign and travel gates, save migration and malformed data, checkpoints, boss attack cycles and rewards, all six guardian counter fights, first- and second-boss fights with five hearts and no immunity override, current riding and timed lifts, Riverheart persistence, flood warnings and damage, hazards, moving-platform carry, combat buffering, controller mapping, preferences, audio buses, blessings, and memories. Real movement checks reach every trial beacon and exit and every gauntlet beacon; enemies and hazards are disabled in those geometry checks to isolate reachability.
+- `tests/gameplay.mjs`: 122 deterministic checks with mocked browser APIs. Coverage includes campaign and travel gates, save migration and malformed data, checkpoints, boss attack cycles and rewards, all six guardian counter fights, first-, second-, and third-boss fights with five hearts and no immunity override, current riding and timed lifts, Riverheart and Emberheart persistence, swept crystal collisions, beacon seal requirements, Amberback crashes and regrowth, flood warnings and damage, hazards, moving-platform carry, combat buffering, controller mapping, preferences, audio buses, blessings, and memories. Real movement checks reach every trial beacon and exit and every gauntlet beacon; enemies and hazards are disabled in those geometry checks to isolate reachability.
 
 ```sh
 npm test
