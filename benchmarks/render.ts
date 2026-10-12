@@ -3,10 +3,13 @@ import {Game} from '../app/game';import {stageRooms} from '../app/campaign';
 let game:any,runId=0;
 const canvas=document.querySelector('canvas')!,result=document.querySelector('#result')!;
 async function load(stage=0,boss=false){runId++;game?.destroy();const proto=Game.prototype as any;proto.save=()=>{};proto.readSave=()=>null;game=new Game(canvas,()=>{});await game.ready;game.start();game.setMuted(true);game.state.room=boss?stageRooms(stage)[3]:stage;game.state.bosses=Array.from({length:stage},(_,i)=>i);game.state.dash=true;game.state.doubleJump=true;game.state.message='';game.player={x:boss?1100:720,y:705,vx:0,vy:0,face:1,grounded:true};game.camera=300;game.invincible=600;await game.loadBackdrop(stage);game.publish();game.setPaused(false);canvas.focus();result.textContent=`Updated · Stage ${stage+1}${boss?' boss':''}`;}
-async function benchmark(native=false,boss=false,stage=boss?5:0){await load(stage,boss);if(boss&&stage===1){game.player.x=1015;game.world[11].enemies[0].cycle=2;game.input('Space',true);}if(boss&&stage===2){game.player.x=1000;game.world[14].enemies[0].cycle=1;}if(native){canvas.width=2560;canvas.height=1440;game.scale=1440/810;game.viewport=1440;}const id=runId;cancelAnimationFrame(game.raf);game.paused=true;game.ctx.canvas.width=canvas.width;let last=0,frames:number[]=[],cpu:number[]=[],renders=0;function frame(now:number){if(id!==runId)return;if(last&&renders>30)frames.push(now-last);last=now;game.elapsed+=1/60;game.camera=300+Math.sin(renders/110)*220;const before=performance.now();if(boss){game.update(1/120);game.update(1/120);}game.render();const elapsed=performance.now()-before;if(renders>30)cpu.push(elapsed);renders++;if(renders<(boss?510:210))requestAnimationFrame(frame);else{const quantile=(a:number[],p:number)=>[...a].sort((x,y)=>x-y)[Math.floor(a.length*p)];const data={version:'updated',scenario:boss?(stage===1?'Tidewing combat':stage===2?'Amberback combat':'Solwarden combat'):'glade camera sweep',width:canvas.width,height:canvas.height,dpr:devicePixelRatio,frames:frames.length,frameMedian:quantile(frames,.5),frameP95:quantile(frames,.95),renderMedian:quantile(cpu,.5),renderP95:quantile(cpu,.95),over25ms:frames.filter(n=>n>25).length};result.textContent=JSON.stringify(data,null,2);}}requestAnimationFrame(frame);}
+async function benchmark(native=false,boss=false,stage=boss?5:0){await load(stage,boss);if(boss&&stage===1){game.player.x=1015;game.world[11].enemies[0].cycle=2;game.input('Space',true);}if(boss&&stage===2){game.player.x=1000;game.world[14].enemies[0].cycle=1;}if(native){canvas.width=2560;canvas.height=1440;game.scale=1440/810;game.viewport=1440;}const id=runId;cancelAnimationFrame(game.raf);game.paused=true;game.ctx.canvas.width=canvas.width;let last=0,frames:number[]=[],cpu:number[]=[],renders=0;function frame(now:number){if(id!==runId)return;if(last&&renders>30)frames.push(now-last);last=now;game.elapsed+=1/60;game.camera=300+Math.sin(renders/110)*220;const before=performance.now();if(boss){game.update(1/120);game.update(1/120);}game.render();const elapsed=performance.now()-before;if(renders>30)cpu.push(elapsed);renders++;if(renders<(boss?510:210))requestAnimationFrame(frame);else{const quantile=(a:number[],p:number)=>[...a].sort((x,y)=>x-y)[Math.floor(a.length*p)];const data={version:'2.5d',...game.renderStats(),scenario:boss?(stage===1?'Tidewing combat':stage===2?'Amberback combat':stage===0?'Briarhorn combat':'Solwarden combat'):'glade camera sweep',width:canvas.width,height:canvas.height,dpr:devicePixelRatio,frames:frames.length,frameMedian:quantile(frames,.5),frameP95:quantile(frames,.95),renderMedian:quantile(cpu,.5),renderP95:quantile(cpu,.95),over25ms:frames.filter(n=>n>25).length};result.textContent=JSON.stringify(data,null,2);}}requestAnimationFrame(frame);}
 function button(text:string,fn:()=>void){const b=document.createElement('button');b.textContent=text;b.onclick=fn;document.querySelector('#controls')!.appendChild(b)}
-button('Benchmark updated',()=>void benchmark(false));button('Benchmark updated native',()=>void benchmark(true));button('Benchmark boss',()=>void benchmark(false,true));button('Benchmark Tidewing',()=>void benchmark(false,true,1));button('Benchmark Amberback',()=>void benchmark(false,true,2));
+button('Benchmark updated',()=>void benchmark(false));button('Benchmark updated native',()=>void benchmark(true));button('Benchmark Briarhorn',()=>void benchmark(false,true,0));button('Benchmark boss',()=>void benchmark(false,true));button('Benchmark Tidewing',()=>void benchmark(false,true,1));button('Benchmark Amberback',()=>void benchmark(false,true,2));
 for(let i=0;i<6;i++)button(`Stage ${i+1}`,()=>void load(i));for(let i=0;i<6;i++)button(`Boss ${i+1}`,()=>void load(i,true));
+button('Render diagnostics',()=>{result.textContent=JSON.stringify(game.renderStats(),null,2)});
+button('Lose WebGL context',()=>{game.world3d?.renderer.forceContextLoss();result.textContent='Context loss requested · Canvas fallback should remain playable';});
+button('Restore WebGL context',()=>{game.world3d?.renderer.forceContextRestore();result.textContent='Context restoration requested';});
 button('Ember Veins seals',()=>void loadAmberTrial());
 button('Freeze crystal crash',()=>void freezeCrash());
 button('Spillway current',()=>void loadSpillway());
@@ -24,3 +27,24 @@ async function freezeSurge(){await loadSurge();cancelAnimationFrame(game.raf);ga
 
 async function loadAmberTrial(){await load(2);game.state.room=12;game.settlePlayer(920,415);game.publish();result.textContent='Ember Veins · dash through both crystal seals';canvas.focus();}
 async function freezeCrash(){await load(2,true);cancelAnimationFrame(game.raf);game.player.x=1000;const e=game.world[14].enemies[0];e.cycle=1;e.timer=0;for(let i=0;i<120*6;i++){game.elapsed+=1/120;game.update(1/120);if(game.amberRegrowth.get(1080)>0)break;}game.invincible=0;game.paused=true;game.render();result.textContent='Amberback · paused at a real charge impact';canvas.focus();}
+
+button('Audit 24 rooms',()=>void auditRooms());
+async function auditRooms(){
+ await load();const id=runId;const samples=[];
+ for(let room=0;room<24;room++){
+  if(id!==runId)return;
+  const stage=room<6?room:Math.floor((room-6)/3);game.state.room=room;game.state.bosses=[];game.state.stage=stage;game.settlePlayer(720);game.render();
+  await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
+  const sample=game.renderStats();samples.push({room,...sample});
+ }
+ result.textContent=JSON.stringify({rooms:samples.length,allWebGL:samples.every(s=>s.renderer==='webgl-2.5d'),maxGeometries:Math.max(...samples.map(s=>s.geometries)),maxDrawCalls:Math.max(...samples.map(s=>s.drawCalls)),samples},null,2);
+ game.setPaused(true);
+}
+
+for(const pose of ['Idle','Run','Jump','Strike'])button(`Hero ${pose}`,()=>void reviewHero(pose));
+async function reviewHero(pose:string){
+ await load();cancelAnimationFrame(game.raf);game.paused=true;game.invincible=0;
+ game.player.x=700;game.player.y=pose==='Jump'?520:705;game.player.vx=pose==='Run'?280:0;game.player.vy=pose==='Jump'?-180:0;game.player.grounded=pose!=='Jump';
+ for(let i=0;i<20;i++){game.state.time+=1/60;game.attack=pose==='Strike'?.17:0;game.render();}
+ result.textContent=`Skinned hero · ${pose} · frozen review`;canvas.focus();
+}

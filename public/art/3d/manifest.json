@@ -1,0 +1,174 @@
+{
+  "prepared": "2026-10-11",
+  "totalBytes": 15852559,
+  "files": [
+    {
+      "file": "briarhorn.glb",
+      "bytes": 848344,
+      "sha256": "bb09b1be9a0aab75597a75c9ca293c51e4d0eb46509e493e0adfd7e0de5aa5f3",
+      "license": "CC0-1.0",
+      "source": "https://opengameart.org/content/old-deer-male"
+    },
+    {
+      "file": "fern_02/fern_02.bin",
+      "bytes": 176176,
+      "sha256": "fe1abb762bcbbc7ad9e86925c8080437a62add257d9280e9142fdc85c226e64c",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/fern_02"
+    },
+    {
+      "file": "fern_02/fern_02.gltf",
+      "bytes": 6899,
+      "sha256": "33974295ee19670af4877705fc7d91f33f42d6302f0d44a625e072271223031f",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/fern_02"
+    },
+    {
+      "file": "fern_02/textures/fern_02_arm_1k.jpg",
+      "bytes": 95771,
+      "sha256": "349e9ae62f15fd741070b5cc65365371577973a90ab0e4b0cc24efa1e35c1d70",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/fern_02"
+    },
+    {
+      "file": "fern_02/textures/fern_02_diff_1k.jpg",
+      "bytes": 91485,
+      "sha256": "6b9313bd07b522fd8996ae2d4a5a5c673ae999b133ead2a659bf823bd126c1cd",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/fern_02"
+    },
+    {
+      "file": "fern_02/textures/fern_02_nor_gl_1k.jpg",
+      "bytes": 171091,
+      "sha256": "0df813b85f100c3de0da186aa06d1538a3c7d113bf7c078eb1cedb9b84792671",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/fern_02"
+    },
+    {
+      "file": "forest_ground_04/textures/forest_ground_04_diff_1k.jpg",
+      "bytes": 437140,
+      "sha256": "e96ad38046455a7da8d5b1f5d93dc83e297d4872855697cca798935c0c40647f",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/forest_ground_04"
+    },
+    {
+      "file": "forest_ground_04/textures/forest_ground_04_nor_gl_1k.jpg",
+      "bytes": 687190,
+      "sha256": "43cba7b208daaed5b69abd6a26178f62f4c94ee650b1e99fb942b7824a38d5ea",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/forest_ground_04"
+    },
+    {
+      "file": "forest_ground_04/textures/forest_ground_04_rough_1k.jpg",
+      "bytes": 212027,
+      "sha256": "a8f98c493a68b821356121134867d67b22aecab9811d40116182c856b860d6a4",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/forest_ground_04"
+    },
+    {
+      "file": "luma-rabbit.glb",
+      "bytes": 1470776,
+      "sha256": "6959592d6696fc5799aeb7d81da8e77952a41600aad25a939467d7f954f956e5",
+      "license": "CC0-1.0",
+      "source": "https://opengameart.org/content/rabbit-0"
+    },
+    {
+      "file": "mossy_rock/textures/mossy_rock_diff_1k.jpg",
+      "bytes": 427861,
+      "sha256": "92b80eeb553b535d4bfb10dfec544446104767e2b3755323f16434b382daf14f",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/mossy_rock"
+    },
+    {
+      "file": "mossy_rock/textures/mossy_rock_nor_gl_1k.jpg",
+      "bytes": 466838,
+      "sha256": "d95dde6767dec99627303116f3bbcc0d7167e1736b35cb0cc4f921c23f8fd281",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/mossy_rock"
+    },
+    {
+      "file": "mossy_rock/textures/mossy_rock_rough_1k.jpg",
+      "bytes": 324132,
+      "sha256": "801d95576ff842e2089c7abd88c97220c94e20884a7bcb29f87519bde1869862",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/mossy_rock"
+    },
+    {
+      "file": "pine/pine.bin",
+      "bytes": 5648552,
+      "sha256": "a80fe6928060d8a0141a1c7fb4ad9917e8865269e0545da5a82bd460f9d3d77a",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/pine_sapling_medium"
+    },
+    {
+      "file": "pine/pine.gltf",
+      "bytes": 7049,
+      "sha256": "950e93ac211356b645abd34dd9294c13d76ab434de36e3a1a1b724a4426b5670",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/pine_sapling_medium"
+    },
+    {
+      "file": "pine/textures/pine_sapling_medium_bark_arm_1k.jpg",
+      "bytes": 183173,
+      "sha256": "9980a917870ad8ce07f1f13eb5901b794ff68426b348d7fc2bc420fded92213e",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/pine_sapling_medium"
+    },
+    {
+      "file": "pine/textures/pine_sapling_medium_bark_diff_1k.jpg",
+      "bytes": 215879,
+      "sha256": "4be496e3b6696f94468dbd89160be5e1e57bfd93978fde14de7e919403555fdb",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/pine_sapling_medium"
+    },
+    {
+      "file": "pine/textures/pine_sapling_medium_bark_nor_gl_1k.jpg",
+      "bytes": 402675,
+      "sha256": "8cd0dc901211eeb2eda8edce9db1e7dcde0e7293e8db597d2ef9ffc8a450492d",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/pine_sapling_medium"
+    },
+    {
+      "file": "pine/textures/pine_sapling_medium_twig_arm_1k.jpg",
+      "bytes": 123831,
+      "sha256": "a4f11496c357176751e7e92a259448bd5d4a88f6118ccf57cc9587644d833619",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/pine_sapling_medium"
+    },
+    {
+      "file": "pine/textures/pine_sapling_medium_twig_diff_1k.jpg",
+      "bytes": 175353,
+      "sha256": "94c381d8ff9d9d588ae828bc27487e3ea1f0d1045afa45e9cb1af964fd5565a2",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/pine_sapling_medium"
+    },
+    {
+      "file": "pine/textures/pine_sapling_medium_twig_nor_gl_1k.jpg",
+      "bytes": 344781,
+      "sha256": "2783aa08c0088232ee7b816c9f04727e57b835801722357b9a11bc8b0ce2866a",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/pine_sapling_medium"
+    },
+    {
+      "file": "rock_moss_set_01.glb",
+      "bytes": 874152,
+      "sha256": "6bb94837e1154690ab3343d0bb8082834cad9e863cd01ba971c39949bd02932a",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/rock_moss_set_01"
+    },
+    {
+      "file": "rock_moss_set_02.glb",
+      "bytes": 1076724,
+      "sha256": "b9781d401593cbafa7235f6bc39dbf2abc1dbf287f2a27317b81db01dd9874c5",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/rock_moss_set_02"
+    },
+    {
+      "file": "tree_stump_01.glb",
+      "bytes": 1384660,
+      "sha256": "1155fd8c07dff36d75531e22c03b25ac0c77cba6fc9619eefb85a429a146602d",
+      "license": "CC0-1.0",
+      "source": "https://polyhaven.com/a/tree_stump_01"
+    }
+  ]
+}

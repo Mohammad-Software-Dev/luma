@@ -45,3 +45,27 @@ Original painted scenery generated with the built-in image generation tool:
 Full prompts, asset locations and integration details: `docs/art/environment-prompts.md`.
 
 - `environment-crystals.webp`: original painted amber seals, arena formations, shattered stumps, and regrowing sprouts, created with the built-in image generation tool. Alpha preserved in the WebP conversion. Full prompt: `docs/art/amber-crystal-prompts.md`.
+
+## 2.5D models and surfaces
+
+`app/models-3d.ts` and `app/renderer-3d.ts` contain original procedural mesh models, joint animation, geometry, and generated surface textures created for Luma. Three.js is used under its MIT license. Existing original vistas are reused as distant matte paintings. No meshes or animations were copied or extracted from Metroid Dread, Prince of Persia, F.I.S.T., or the other reference games. Existing painted sprites remain available in the Canvas fallback.
+
+### Licensed scanned environment and skeletal characters (11 October 2026)
+
+The default renderer now uses the following locally bundled assets. The earlier procedural models remain as fallbacks and for creatures that have not yet received an art replacement.
+
+| Adapted asset | Original source | License |
+| --- | --- | --- |
+| Thirteen moss-covered rock variants | [Rock Moss Set 01](https://polyhaven.com/a/rock_moss_set_01), [Rock Moss Set 02](https://polyhaven.com/a/rock_moss_set_02) | CC0 |
+| Four fern variants | [Fern 02](https://polyhaven.com/a/fern_02) | CC0 |
+| Tree stump | [Tree Stump 01](https://polyhaven.com/a/tree_stump_01) | CC0 |
+| Optimized pine, variant A | [Pine Sapling Medium](https://polyhaven.com/a/pine_sapling_medium) | CC0 |
+| Ground and cliff PBR maps | [Forest Ground 04](https://polyhaven.com/a/forest_ground_04), [Mossy Rock](https://polyhaven.com/a/mossy_rock) | CC0 |
+| Luma skeletal rabbit | [Rabbit by CDmir, collaborator TinyWorlds](https://opengameart.org/content/rabbit-0) | CC0 |
+| Briarhorn skeletal stag | [Old Deer Male by CDmir, collaborator TinyWorlds](https://opengameart.org/content/old-deer-male) | CC0 |
+
+Poly Haven's [asset license](https://polyhaven.com/license) permits modification and redistribution, including with source projects. [CC0 1.0 dedication](https://creativecommons.org/publicdomain/zero/1.0/). Only asset files were used; website preview renders were not bundled.
+
+Adaptations: geometry reduction, 1024px environment maps, JPEG/PNG compression, Blender-material conversion to glTF PBR, animation baking, removal of unused character clips, palette adjustments, and original Luma sword/scarf accessories. Pine A was reduced from 2,662,894 to 65,582 triangles. Rock meshes target about 2,200 triangles each; the stump about 6,000. Original source animations drive locomotion; code adds combat poses and transitions. No proprietary reference-game assets were extracted.
+
+See `docs/art/3d-assets.md` for rendering references, production limits and preparation notes. File hashes and source mapping are in `public/art/3d/manifest.json`.

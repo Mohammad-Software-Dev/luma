@@ -1,6 +1,6 @@
 # Luma: The Sunseed
 
-A browser Metroidvania built with TypeScript, React, Canvas 2D, and Web Audio. Its campaign spans **six stages and 24 areas**, with cinematic forest backdrops, movement upgrades, traversal trials, combat gauntlets, optional discoveries, and six mandatory guardian battles.
+A browser Metroidvania built with TypeScript, React, Three.js, and Web Audio. Its campaign spans **six stages and 24 areas**, with cinematic forest backdrops, movement upgrades, traversal trials, combat gauntlets, optional discoveries, and six mandatory guardian battles.
 
 ## Run
 
@@ -76,13 +76,21 @@ Ember Veins now requires two Sun Dash crystal seals to be shattered before its t
 
 Amberback can smash into two arena formations when you bait its charge, exposing a 3.2-second counter window. Crystals regrow after nine seconds; jumps and positioning still matter between openings. Painted intact, shattered, and regrowing formations share the cavern’s amber palette. [Design and verification](docs/quality/amber-hollow.md).
 
-## Layered environment
+## 2.5D world
+
+The default renderer is now WebGL: solid platforms, modeled scenery, jointed mesh characters and guardians, directional lighting, shadows, surface textures, atmospheric fog, and a perspective camera. The six-stage campaign still uses a single gameplay plane, so movement, collision, combat timings, controls, and existing saves stay compatible. Distant painted vistas, readable effects, and interaction labels complement the 3D scene.
+
+The environment uses licensed scanned rock, pine, fern and stump assets with PBR materials. Luma and Briarhorn use textured skeletal models and blended animation. Other creatures still use provisional procedural rigs and remain the next art priority. No models were extracted from the reference games. Browsers without WebGL, or a lost GPU context, use the previous Canvas presentation. Restoration returns to 3D without restarting the adventure.
+
+[Architecture, references, and verification](docs/quality/2.5d-conversion.md).
+
+## Layered environment (Canvas fallback)
 
 The vista, distant silhouettes, middle landmarks, drifting weather, and foreground plants scroll at distinct depths. Each biome has an authored composition: trees and ruins frame routes, trial scenery leaves landing paths clear, and arenas keep the fight space open. Terrain materials follow the biome and platform role rather than cycling through unrelated textures. Reduced motion fixes decorative layers and removes sway. Six painted terrain families bring mossy cliffs, root bridges, wet slate, amber crystals, mushroom shelves and ruined arches to the six biomes. Platform selection is stable during movement; existing collision surfaces and routes are preserved.
 
 Organic seed lanterns, sunwells, ivy-covered passages, brambles and flowing vent effects replace the former geometric markers. Foreground plants stay below the walking surface. Kenney's CC0 Foliage Sprites are adapted into biome-tinted scenery; see [credits](public/art/CREDITS.md) and the [environment prompt set](docs/art/environment-prompts.md).
 
-## Combat artwork and animation
+## Combat artwork and animation (Canvas fallback)
 
 Luma now uses twelve painted blade-combo poses, with separate idle, jumping, falling, and dash poses alongside the eight-frame run cycle. Each combo has anticipation, a visible release, and recovery; damage begins 45ms into the swing and ends before the recovery pose. Horizontal slashes, rising cuts, and the overhead finisher have different sunlight trails.
 
@@ -92,7 +100,9 @@ Effects adapt eight textures from [Kenney’s CC0 Particle Pack](https://kenney.
 
 ## Rendering performance
 
-Scenery and platform compositions are cached, lighting sprites are reused, off-screen enemies are culled, particles are bounded, and hidden tabs stop rendering. The backing canvas preserves aspect ratio within a 1920×1080 pixel budget. In a local browser benchmark, the glade improved from about 30 fps to 60 fps; the updated renderer also reached 60 fps at the original 2560×1440 resolution. These are local warm-scene measurements, not a guarantee across devices.
+The WebGL renderer batches static geometry by material, reuses model resources, disposes room geometry on transitions, and uses one shadow-casting light. The backing canvas retains the 1920×1080 budget. See the [2.5D verification report](docs/quality/2.5d-conversion.md) for current measurements.
+
+In the Canvas fallback, scenery and platform compositions are cached, lighting sprites are reused, off-screen enemies are culled, particles are bounded, and hidden tabs stop rendering. The backing canvas preserves aspect ratio within a 1920×1080 pixel budget. In a local browser benchmark, the glade improved from about 30 fps to 60 fps; the updated renderer also reached 60 fps at the original 2560×1440 resolution. These are local warm-scene measurements, not a guarantee across devices.
 
 See the [measurement report and design references](docs/quality/performance-and-encounters.md). While the dev server runs, `/benchmarks/render.html` provides isolated scene and boss-combat checks without saving adventure progress. It is not copied into the production build.
 
@@ -114,6 +124,8 @@ Starting a new journey resets adventure progress and retains device preferences.
 
 ## Implementation and verification
 
+- `app/renderer-3d.ts`, `app/natural-assets.ts`, `app/avatar-3d.ts`, and `app/guardian-3d.ts`: perspective scene, licensed scanned assets, PBR lighting, skinned character animation, bounded resources, and fallback support. `app/models-3d.ts` supplies the remaining procedural creatures.
+- `tests/rendering.mjs`: 12 checks for projection, six-biome geometry, moving platforms, resource cleanup, crystal state, imported skeletal animation, scan loading, missing-asset fallback, and context lifecycle; actual GPU output is reviewed in the browser.
 - `app/campaign.ts`: stage content, authored trials, shared gate rules, and boss attack profiles used by both behavior and warnings.
 - `app/environment.ts`, `app/scenery.ts`, and `app/environment-atlas.ts`: authored parallax compositions, cached terrain, organic interaction props and natural hazard effects.
 - `app/combat-visuals.ts`, `app/art-atlas.ts`, and `app/boss-action-atlas.ts`: shared swing timing, sprite poses, anatomical pivots, and bounded combat effects. `app/encounters.ts` defines boss movement and attack selection.
@@ -132,14 +144,17 @@ npm run typecheck
 npm run build
 ```
 
+`tests/asset-package.mjs` checks the licensed asset inventory, hashes, local dependencies, buffer bounds, and 16 MiB package budget.
+
 GitHub Actions runs gameplay checks, TypeScript checks, and production builds on pushes and pull requests. Work continues directly on `main` as requested.
 
 Browser review covers desktop and narrow-screen layouts, the campaign map, guardian interface, and hazard visuals. Additional checks cover the anticipation/recovery damage boundaries, valid sprite crops, reduced-motion effect caps, and missing-art fallback. Hardware controller, physical touch-device, and audio checks still need real-device playtesting. The expanded content supports a longer adventure, but its completion time has not been measured in a full human playthrough.
 
 ## Next development priorities
 
-1. Play the complete six-stage campaign to tune difficulty, encounter pacing, checkpoints, and duration from actual player feedback.
-2. Expand the variation between combat gauntlets and add optional side routes and rewards.
-3. Complete physical controller, touch, and audio checks before updating the hosted release.
+1. Replace the remaining procedural creatures and guardians with cohesive textured models and authored combat animation.
+2. Play the complete six-stage campaign to tune difficulty, encounter pacing, checkpoints, and duration from actual player feedback.
+3. Expand the variation between combat gauntlets and add optional side routes and rewards.
+4. Complete physical controller, touch, and audio checks before updating the hosted release.
 
-The artwork combines realistic environment backdrops with stylized animated characters in a 2D game. The optional progress WebMCP tool is feature-detected; unsupported browsers run the game normally.
+The 2.5D artwork combines painted distant vistas, CC0 scanned natural assets, and textured skeletal rabbit/stag models. Other creatures still use provisional procedural rigs; see [asset provenance and remaining art work](docs/art/3d-assets.md). The optional progress WebMCP tool is feature-detected; unsupported browsers run the game normally.
